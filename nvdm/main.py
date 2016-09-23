@@ -163,7 +163,7 @@ for epoch in xrange(0, max_iter):
     print('--- Avg loss:', np.mean(losses))
 
     # Find closest words
-    # R_out = sess.run(R)
-    # w = R_out[word2idx['computer'],:].reshape(1, h_dim)
-    # closest = distance.cdist(w, R_out, metric='cosine')[0].argsort()
-    # print idx2word[closest[:10]]
+    R_out = sess.run(R)
+    w = R_out[word2idx['jews'],:].reshape(1, h_dim)
+    closest = distance.cdist(w, R_out, metric='cosine')[0].argsort()
+    print idx2word[closest[:10]]
