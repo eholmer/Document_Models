@@ -11,6 +11,7 @@ flags.DEFINE_float("decay_step", 10000, "# of decay step for learning rate decay
 flags.DEFINE_integer("max_iter", 450000, "Maximum of iteration [450000]")
 flags.DEFINE_integer("h_dim", 50, "The dimension of latent variable [50]")
 flags.DEFINE_integer("embed_dim", 500, "The dimension of word embeddings [500]")
+flags.DEFINE_boolean("restore", False, "Restore from previous session [False]")
 FLAGS = flags.FLAGS
 
 
@@ -48,11 +49,11 @@ np.set_printoptions(threshold=np.inf)
 # Define parameters
 alternating = True
 learning_rate = FLAGS.learning_rate
-step = tf.Variable(0, trainable=False)
 max_iter = FLAGS.max_iter
 h_dim = FLAGS.h_dim
 embed_dim = FLAGS.embed_dim
 batch_size = 100
+restore = FLAGS.restore
 
 with open('./data/train_trimmed.txt') as f:
     vectorizer = CountVectorizer()
@@ -66,6 +67,7 @@ with open('./data/train_trimmed.txt') as f:
 
 
 # Build model
+step = tf.Variable(0, trainable=False)
 x = tf.placeholder(tf.float32, [None, input_dim], name="input")
 v_batch_size = tf.shape(x)[0]
 # Encoder -----------------------------------
@@ -131,11 +133,13 @@ optimizer = tf.train.AdamOptimizer(learning_rate).minimize(total_loss)
 sess = tf.Session()
 sess.run(tf.initialize_all_variables())
 
+saver = tf.train.Saver()
+if restore:
+    saver.restore(sess, "checkpoints/model.ckpt")
 merged_sum = tf.merge_all_summaries()
 writer = tf.train.SummaryWriter("./logs/", sess.graph)
 
 start_time = time.time()
-
 for epoch in xrange(0, max_iter):
     print("--- Epoch:", epoch)
     losses = []
@@ -162,8 +166,11 @@ for epoch in xrange(0, max_iter):
                         loss)
     print('--- Avg loss:', np.mean(losses))
 
+    if epoch % 10 == 0:
+        saver.save(sess, "checkpoints/model.ckpt")
+
     # Find closest words
     R_out = sess.run(R)
-    w = R_out[word2idx['jews'],:].reshape(1, h_dim)
+    w = R_out[word2idx['weapon'],:].reshape(1, h_dim)
     closest = distance.cdist(w, R_out, metric='cosine')[0].argsort()
     print idx2word[closest[:10]]

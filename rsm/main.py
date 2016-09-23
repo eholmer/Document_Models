@@ -67,6 +67,6 @@ for epoch in xrange(0, max_iter):
 
     print "Mean reconstrction error: {}".format(np.mean(reconstruction_error))
     # Find closest word
-    # w = W[word2idx['jews'], :].reshape(1, h_dim)
+    # w = W[word2idx['terrorist'], :].reshape(1, h_dim)
     # closest = distance.cdist(w, W, metric='cosine')[0].argsort()
     # print idx2word[closest[:10]]
