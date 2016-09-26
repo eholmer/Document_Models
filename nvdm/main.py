@@ -5,7 +5,7 @@ from sklearn.feature_extraction.text import CountVectorizer
 from scipy.spatial import distance
 
 flags = tf.app.flags
-flags.DEFINE_float("learning_rate", 0.0001, "Learning rate of adam optimizer [0.001]")
+flags.DEFINE_float("learning_rate", 0.0001, "Learning rate of adam optimizer [0.0001]")
 flags.DEFINE_float("decay_rate", 0.96, "Decay rate of learning rate [0.96]")
 flags.DEFINE_float("decay_step", 10000, "# of decay step for learning rate decaying [10000]")
 flags.DEFINE_integer("max_iter", 450000, "Maximum of iteration [450000]")
@@ -52,6 +52,7 @@ np.set_printoptions(threshold=np.inf)
 # Define parameters
 alternating = FLAGS.alternate
 learning_rate = FLAGS.learning_rate
+decay_rate = FLAGS.decay_rate
 max_iter = FLAGS.max_iter
 h_dim = FLAGS.h_dim
 embed_dim = FLAGS.embed_dim
@@ -72,6 +73,9 @@ with open('./data/train_trimmed.txt') as f:
 
 # Build model
 step = tf.Variable(0, trainable=False)
+decay = tf.train.exponential_decay(
+    learning_rate, step, n_samples / batch_size, decay_rate, staircase=True)
+
 x = tf.placeholder(tf.float32, [None, input_dim], name="input")
 v_batch_size = tf.shape(x)[0]
 
@@ -118,6 +122,7 @@ total_loss = tf.reduce_mean(encoder_loss + generator_loss)
 tf.scalar_summary('Encoder loss', tf.reduce_mean(encoder_loss))
 tf.scalar_summary('Generator loss', tf.reduce_mean(generator_loss))
 tf.scalar_summary('Total loss', total_loss)
+tf.scalar_summart('Learning rate', decay)
 
 encoder_var_list, generator_var_list = [], []
 for var in tf.trainable_variables():
@@ -126,13 +131,17 @@ for var in tf.trainable_variables():
     elif "Generator" in var.name:
         generator_var_list.append(var)
 
-e_optimizer = tf.train.AdamOptimizer(learning_rate) \
-              .minimize(total_loss, var_list=encoder_var_list)
 
-g_optimizer = tf.train.AdamOptimizer(learning_rate) \
-              .minimize(total_loss, var_list=generator_var_list)
 
-optimizer = tf.train.AdamOptimizer(learning_rate).minimize(total_loss)
+e_optimizer = tf.train.AdamOptimizer(decay) \
+              .minimize(total_loss, var_list=encoder_var_list,
+                        global_step=step)
+
+g_optimizer = tf.train.AdamOptimizer(decay) \
+              .minimize(total_loss, var_list=generator_var_list,
+                        global_step=step)
+
+optimizer = tf.train.AdamOptimizer(decay).minimize(total_loss)
 
 # Train ---------------------------------------------
 sess = tf.Session()
