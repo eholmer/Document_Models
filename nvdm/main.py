@@ -11,7 +11,10 @@ flags.DEFINE_float("decay_step", 10000, "# of decay step for learning rate decay
 flags.DEFINE_integer("max_iter", 450000, "Maximum of iteration [450000]")
 flags.DEFINE_integer("h_dim", 50, "The dimension of latent variable [50]")
 flags.DEFINE_integer("embed_dim", 500, "The dimension of word embeddings [500]")
+flags.DEFINE_integer("batch_size", 100, "Batch size [100]")
 flags.DEFINE_boolean("restore", False, "Restore from previous session [False]")
+flags.DEFINE_boolean("alternate", False, "Use alternating updates [False]")
+flags.DEFINE_boolean("train", False, "Train or skip directly to evaluation [True]")
 FLAGS = flags.FLAGS
 
 
@@ -47,13 +50,14 @@ def batch(iterable, n=1):
 np.set_printoptions(threshold=np.inf)
 
 # Define parameters
-alternating = True
+alternating = FLAGS.alternate
 learning_rate = FLAGS.learning_rate
 max_iter = FLAGS.max_iter
 h_dim = FLAGS.h_dim
 embed_dim = FLAGS.embed_dim
-batch_size = 100
+batch_size = FLAGS.batch_size
 restore = FLAGS.restore
+train = FLAGS.train
 
 with open('./data/train_trimmed.txt') as f:
     vectorizer = CountVectorizer()
@@ -70,6 +74,7 @@ with open('./data/train_trimmed.txt') as f:
 step = tf.Variable(0, trainable=False)
 x = tf.placeholder(tf.float32, [None, input_dim], name="input")
 v_batch_size = tf.shape(x)[0]
+
 # Encoder -----------------------------------
 with tf.variable_scope("Encoder"):
     W1 = weight_variable([input_dim, embed_dim])
