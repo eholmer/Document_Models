@@ -139,43 +139,56 @@ sess = tf.Session()
 sess.run(tf.initialize_all_variables())
 
 saver = tf.train.Saver()
+
 if restore:
     saver.restore(sess, "checkpoints/model.ckpt")
-merged_sum = tf.merge_all_summaries()
-writer = tf.train.SummaryWriter("./logs/", sess.graph)
 
-start_time = time.time()
-for epoch in xrange(0, max_iter):
-    print("--- Epoch:", epoch)
-    losses = []
-    for i, batch_i in enumerate(batch(documents, batch_size)):
+if train:
+    merged_sum = tf.merge_all_summaries()
+    writer = tf.train.SummaryWriter("./logs/", sess.graph)
 
-        if alternating:
-            _, eloss = sess.run([e_optimizer, encoder_loss],
-                                feed_dict={x: batch_i})
+    start_time = time.time()
+    for epoch in xrange(0, max_iter):
+        print("--- Epoch:", epoch)
+        losses = []
+        for i, batch_i in enumerate(batch(documents, batch_size)):
 
-            _, gloss, loss = sess.run([g_optimizer, generator_loss, total_loss],
-                                      feed_dict={x: batch_i})
-        else:
-            _, eloss, loss = sess.run([optimizer, encoder_loss, total_loss],
-                                      feed_dict={x: batch_i})
+            if alternating:
+                _, eloss = sess.run([e_optimizer, encoder_loss],
+                                    feed_dict={x: batch_i})
 
-        losses.append(loss)
-        if i % 2 == 0:
-            summary = sess.run(merged_sum, feed_dict={x: batch_i})
-            writer.add_summary(summary, epoch)
-        if i % 10 == 0:
-            # print "Encoder_loss: {}".format(eloss)
-            print "Step: {}, time: {}, loss: {}" \
-                .format(i, time.time() - start_time,
-                        loss)
-    print('--- Avg loss:', np.mean(losses))
+                _, gloss, loss = sess.run([g_optimizer, generator_loss, total_loss],
+                                          feed_dict={x: batch_i})
+            else:
+                _, eloss, loss = sess.run([optimizer, encoder_loss, total_loss],
+                                          feed_dict={x: batch_i})
 
-    if epoch % 10 == 0:
-        saver.save(sess, "checkpoints/model.ckpt")
+            losses.append(loss)
+            if i % 2 == 0:
+                summary = sess.run(merged_sum, feed_dict={x: batch_i})
+                writer.add_summary(summary, epoch)
+            if i % 10 == 0:
+                print "Step: {}, time: {}, loss: {}" \
+                    .format(i, time.time() - start_time, loss)
 
-    # Find closest words
-    R_out = sess.run(R)
-    w = R_out[word2idx['weapon'],:].reshape(1, h_dim)
-    closest = distance.cdist(w, R_out, metric='cosine')[0].argsort()
-    print idx2word[closest[:10]]
+        print('--- Avg loss:', np.mean(losses))
+
+        if epoch % 10 == 0:
+            saver.save(sess, "checkpoints/model.ckpt")
+
+        # Find closest words
+        R_out = sess.run(R)
+        w = R_out[word2idx['weapon'], :].reshape(1, h_dim)
+        closest = distance.cdist(w, R_out, metric='cosine')[0].argsort()
+        print idx2word[closest[:10]]
+
+
+# Report perplexity ---------------------------------------
+with open('./data/test_trimmed.txt') as f:
+    test_docs = f.read().splitlines()
+    test_documents = vectorizer.transform(test_docs).toarray()
+    np.random.shuffle(test_documents)
+
+Nd = tf.reduce_sum(x, 1)  # Length of each document
+new_lower_bound = tf.reduce_mean((encoder_loss + generator_loss) / Nd)
+print np.exp(sess.run(new_lower_bound, feed_dict={x: test_documents}))
