@@ -163,11 +163,13 @@ if train:
         for i, batch_i in enumerate(batch(documents, batch_size)):
 
             if alternating:
-                _, eloss = sess.run([e_optimizer, encoder_loss],
-                                    feed_dict={x: batch_i})
-
-                _, gloss, loss = sess.run([g_optimizer, generator_loss, total_loss],
-                                          feed_dict={x: batch_i})
+                if i % 2 == 0:
+                    _, eloss = sess.run([e_optimizer, encoder_loss],
+                                        feed_dict={x: batch_i})
+                else:
+                    _, gloss, loss = sess.run([g_optimizer, generator_loss,
+                                               total_loss],
+                                               feed_dict={x: batch_i})
             else:
                 _, eloss, loss = sess.run([optimizer, encoder_loss, total_loss],
                                           feed_dict={x: batch_i})
