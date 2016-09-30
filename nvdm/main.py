@@ -60,6 +60,7 @@ batch_size = FLAGS.batch_size
 restore = FLAGS.restore
 train = FLAGS.train
 
+# Load data
 with open('./data/train_trimmed.txt') as f:
     vectorizer = CountVectorizer()
     train_docs = f.read().splitlines()
@@ -69,6 +70,11 @@ with open('./data/train_trimmed.txt') as f:
     idx2word = np.array(vectorizer.get_feature_names())
     input_dim = len(vectorizer.vocabulary_)
     n_samples = documents.shape[0]
+
+with open('./data/test_trimmed.txt') as f:
+    test_docs = f.read().splitlines()
+    test_documents = vectorizer.transform(test_docs).toarray()
+    np.random.shuffle(test_documents)
 
 
 # Build model
@@ -122,7 +128,7 @@ total_loss = tf.reduce_mean(encoder_loss + generator_loss)
 tf.scalar_summary('Encoder loss', tf.reduce_mean(encoder_loss))
 tf.scalar_summary('Generator loss', tf.reduce_mean(generator_loss))
 tf.scalar_summary('Total loss', total_loss)
-tf.scalar_summart('Learning rate', decay)
+tf.scalar_summary('Learning rate', decay)
 
 encoder_var_list, generator_var_list = [], []
 for var in tf.trainable_variables():
@@ -141,9 +147,12 @@ g_optimizer = tf.train.AdamOptimizer(decay) \
               .minimize(total_loss, var_list=generator_var_list,
                         global_step=step)
 
-optimizer = tf.train.AdamOptimizer(decay).minimize(total_loss)
+optimizer = tf.train.AdamOptimizer(decay).minimize(total_loss,
+                        global_step=step)
 
 # Train ---------------------------------------------
+Nd = tf.reduce_sum(x, 1)  # Length of each document
+new_lower_bound = tf.reduce_mean((encoder_loss + generator_loss) / Nd)
 sess = tf.Session()
 sess.run(tf.initialize_all_variables())
 
@@ -163,17 +172,12 @@ if train:
         for i, batch_i in enumerate(batch(documents, batch_size)):
 
             if alternating:
-                if i % 2 == 0:
-                    _, eloss = sess.run([e_optimizer, encoder_loss],
-                                        feed_dict={x: batch_i})
-                else:
-                    _, gloss, loss = sess.run([g_optimizer, generator_loss,
-                                               total_loss],
-                                               feed_dict={x: batch_i})
+                sess.run([e_optimizer], feed_dict={x: batch_i})
+                sess.run([g_optimizer], feed_dict={x: batch_i})
             else:
-                _, eloss, loss = sess.run([optimizer, encoder_loss, total_loss],
-                                          feed_dict={x: batch_i})
+                sess.run([optimizer], feed_dict={x: batch_i})
 
+            loss = sess.run([total_loss], feed_dict={x: batch_i})
             losses.append(loss)
             if i % 2 == 0:
                 summary = sess.run(merged_sum, feed_dict={x: batch_i})
@@ -193,13 +197,24 @@ if train:
         closest = distance.cdist(w, R_out, metric='cosine')[0].argsort()
         print idx2word[closest[:10]]
 
+        # Report crude perplexity
+        print np.exp(sess.run(new_lower_bound, feed_dict={x: test_documents}))
+
 
 # Report perplexity ---------------------------------------
-with open('./data/test_trimmed.txt') as f:
-    test_docs = f.read().splitlines()
-    test_documents = vectorizer.transform(test_docs).toarray()
-    np.random.shuffle(test_documents)
+with tf.variable_scope("perplexity"):
+    losses = []
 
-Nd = tf.reduce_sum(x, 1)  # Length of each document
-new_lower_bound = tf.reduce_mean((encoder_loss + generator_loss) / Nd)
-print np.exp(sess.run(new_lower_bound, feed_dict={x: test_documents}))
+    # Sample h 20 times for perplexity calc as reported in paper.
+    for i in range(20):
+        _eps = tf.random_normal((v_batch_size, h_dim), 0, 1, dtype=tf.float32)
+        _h = mu + sigma*_eps
+        _E = -tf.matmul(_h, R, transpose_b=True) - b
+        _p_x_i = tf.nn.log_softmax(_E)
+        loss = -tf.reduce_sum(x * _p_x_i, 1)
+        losses.append(tf.reshape(loss, [1, v_batch_size]))
+
+    new_generator_loss = tf.reduce_mean(tf.concat(0, losses), 0)
+    _Nd = tf.reduce_sum(x, 1)  # Length of each document
+    new_total_loss = tf.reduce_mean((new_generator_loss + encoder_loss) / _Nd)
+    print np.exp(sess.run(new_total_loss, feed_dict={x: test_documents}))
