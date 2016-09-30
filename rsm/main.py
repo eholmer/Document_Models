@@ -14,8 +14,9 @@ def batch(iterable, n=1):
 # Parameters
 h_dim = 50
 batch_size = 100
-learning_rate = 0.001
-max_iter = 50000
+learning_rate = 0.0001
+max_iter = 1000
+momentum = 0.9
 
 with open('./data/train_trimmed.txt') as f:
     vectorizer = CountVectorizer()
@@ -30,6 +31,10 @@ with open('./data/train_trimmed.txt') as f:
 W = 0.001 * np.random.randn(input_dim, h_dim)
 a = 0.001 * np.random.randn(h_dim)
 b = 0.001 * np.random.randn(input_dim)
+
+W_upd = np.zeros((input_dim, h_dim))
+a_upd = np.zeros(h_dim)
+b_upd = np.zeros(input_dim)
 
 learning_rate /= batch_size
 
@@ -58,9 +63,14 @@ for epoch in xrange(0, max_iter):
         h_2_prob = sigmoid(np.dot(x_1_sample, W) + np.outer(D, a))
 
         # 2. Update parameters
-        W += learning_rate * (np.dot(x.T, h_1_prob) - np.dot(x_1_sample.T, h_2_prob))
-        a += learning_rate * (h_1_prob.sum(axis=0) - h_2_prob.sum(axis=0))
-        b += learning_rate * (x.sum(axis=0) - x_1_sample.sum(axis=0))
+        W_upd = W_upd*momentum + np.dot(x.T, h_1_prob) - \
+                                 np.dot(x_1_sample.T, h_2_prob)
+        a_upd = a_upd*momentum + h_1_prob.sum(axis=0) - h_2_prob.sum(axis=0)
+        b_upd = b_upd*momentum + x.sum(axis=0) - x_1_sample.sum(axis=0)
+
+        W += learning_rate * W_upd
+        a += learning_rate * a_upd
+        b += learning_rate * b_upd
 
         reconstruction_error.append(np.linalg.norm(x_1_sample - x)**2
                                     / (input_dim*v_batch_size))
