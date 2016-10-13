@@ -115,7 +115,7 @@ class DocNADE():
                                         feed_dict={self.x: doc})
                 losses.append(loss)
                 if j % 1000 == 0:
-                    print "Processing doc {}".format(j)
+                    print("Processing doc {}".format(j))
                 if j % 5000 == 0:
                     print("Closest to \"weapons\":")
                     print(self.closest_words("weapon"))
@@ -123,9 +123,9 @@ class DocNADE():
                     print("Closest to \"books\":")
                     print(self.closest_words("books"))
 
-            print "Loss: {}".format(np.mean(losses))
+            print("Loss: {}".format(np.mean(losses)))
             perplexity = self.perplexity(test)
-            print "Perplexity: {}".format(perplexity)
+            print("Perplexity: {}".format(perplexity))
             if perplexity < best:
                 self.saver.save(self.sess, "checkpoints/docnade_p={}.ckpt"
                                            .format(int(perplexity)))
@@ -217,7 +217,7 @@ class DocNADE():
             loss2 = self.sess.run(self.nll, feed_dict={self.x: doc2})
             losses1.append(loss1/len(doc1))
             losses2.append(loss2/len(doc2))
-        print np.exp(np.mean(losses1))/np.exp(np.mean(losses2))
+        print(np.exp(np.mean(losses1))/np.exp(np.mean(losses2)))
 
 
 class RSM():
@@ -313,8 +313,8 @@ class RSM():
                 reconstruction_error.append(np.linalg.norm(x_1_sample - x)**2
                                             / (self.input_dim*v_batch_size))
 
-            print "Mean reconstrction error: {}"\
-                .format(np.mean(reconstruction_error))
+            print("Mean reconstrction error: {}"
+                  .format(np.mean(reconstruction_error)))
 
             # Find closest word
             print(self.closest_word("weapons"))
@@ -438,10 +438,8 @@ class RSM():
         prec = []
         for frac in fracs:
             subset = correct[:frac+1]
-            # print subset.shape
-            # print subset
             prec.append(np.mean(subset))
-        print prec
+        print(prec)
 
     def closest_word(self, word, n=10):
         w = self.W[self.word2idx[word], :].reshape(1, self.h_dim)
@@ -595,8 +593,7 @@ class NVDM():
                                             feed_dict={self.x: batch_i})
                     writer.add_summary(summary, epoch)
                 if i % 10 == 0:
-                    print "Step: {}, loss: {}"\
-                        .format(i, loss)
+                    print("Step: {}, loss: {}".format(i, loss))
 
             print('--- Avg loss:', np.mean(losses))
 
@@ -608,7 +605,7 @@ class NVDM():
             print(self.closest_words("books"))
 
             # Report crude perplexity
-            print self.perplexity(test)
+            print(self.perplexity(test))
 
     def perplexity(self, data, samples=1):
         """ Calculate perplexity using 1 or more samples of the hidden unit.
