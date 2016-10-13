@@ -1,4 +1,4 @@
-from docNADE.docnade import DocNADE, RSM, NVDM
+from topic_models import DocNADE, RSM, NVDM
 import numpy as np
 import scipy.sparse as sp
 
