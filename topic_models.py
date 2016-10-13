@@ -640,7 +640,7 @@ class NVDM():
         self.saver.restore(self.sess, path)
 
     def ir(self, train, test, train_target, test_target):
-	""" Perform Information Retrieval test. Measures the precision for
+        """ Perform Information Retrieval test. Measures the precision for
         different pre-defined Recall rates.
 
         Parameters
@@ -650,7 +650,6 @@ class NVDM():
         train_target : Array of target labels for each training sample.
         test_target : Array of target labels for each testing sample.
         """
-
         fracs = np.rint(np.array([0.0002, 0.001, 0.004, 0.016, 0.064, 0.256])
                         * len(train_target))
 
