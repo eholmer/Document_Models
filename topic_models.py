@@ -118,7 +118,7 @@ class DocNADE():
                     print("Processing doc {}".format(j))
                 if j % 5000 == 0:
                     print("Closest to \"weapons\":")
-                    print(self.closest_words("weapon"))
+                    print(self.closest_words("weapons"))
 
                     print("Closest to \"books\":")
                     print(self.closest_words("books"))
