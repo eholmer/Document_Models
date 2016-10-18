@@ -271,7 +271,7 @@ class RSM():
 
         learning_rate /= batch_size
         reconstruction_error = []
-        for epoch in xrange(0, max_iter):
+        for epoch in range(0, max_iter):
             print("--- Epoch:", epoch)
             reconstruction_error = []
             for i, x in enumerate(batch(train, batch_size)):
@@ -289,7 +289,7 @@ class RSM():
                 x_1_prob = np.exp(np.dot(h_1_sample, self.W.T) + self.b)
                 x_1_prob /= x_1_prob.sum(axis=1).reshape(v_batch_size, 1)
                 x_1_sample = np.zeros(x_1_prob.shape)
-                for j in xrange(v_batch_size):
+                for j in range(v_batch_size):
                     x_1_sample[j] = np.random.multinomial(D[j], x_1_prob[j])
 
                 # - compute p(h|x)
@@ -374,7 +374,7 @@ class RSM():
 
             # Sample visible v_1:
             x_1_sample = np.zeros((M, self.input_dim))
-            for j in xrange(M):
+            for j in range(M):
                 x_1_sample[j, :] = np.random.multinomial(D, x_1_prob, size=1)
 
             def p_k(b_k, v):
@@ -382,7 +382,7 @@ class RSM():
                        + np.log1p(np.exp(b_k*(np.dot(v, self.W) + D*self.a)))\
                        .sum(axis=1)
 
-            for s in xrange(0, steps-1):
+            for s in range(0, steps-1):
 
                 # Add p_(k+1)(v_k) and subtract p_k(v_k)
                 lw += p_k(b_k[s+1], x_1_sample)
@@ -398,7 +398,7 @@ class RSM():
                 x_1_prob = np.exp(b_k[s+1] * (np.dot(h_1_sample, self.W.T)
                                               + self.b) + self.b)
                 x_1_prob /= x_1_prob.sum(axis=1).reshape(M, 1)
-                for j in xrange(M):
+                for j in range(M):
                     x_1_sample[j, :] = np.random.multinomial(D, x_1_prob[j],
                                                              size=1)
 
@@ -578,7 +578,7 @@ class NVDM():
         merged_sum = tf.merge_all_summaries()
         writer = tf.train.SummaryWriter("./logs/", self.sess.graph)
 
-        for epoch in xrange(0, max_iter):
+        for epoch in range(0, max_iter):
             print("--- Epoch:", epoch)
             losses = []
             for i, batch_i in enumerate(batch(train, batch_size)):
