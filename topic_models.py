@@ -37,13 +37,13 @@ def batch(iterable, n=1):
     iterable : Matrix to take batches from.
     n : Size of each batch.
     '''
-    l = len(iterable)
+    l = iterable.shape[0]
     for ndx in range(0, l, n):
         yield iterable[ndx:min(ndx + n, l)]
 
 
 class DocNADE():
-    def __init__(self, word2idx, idx2word, h_dim=50, voc_size=2000):
+    def __init__(self, voc_size, word2idx=None, idx2word=None, h_dim=50):
         """ Initate Tensorflow graph for DocNADE.
 
         Parameters
@@ -93,7 +93,7 @@ class DocNADE():
         self.sess = tf.Session()
         self.saver = tf.train.Saver()
 
-    def train(self, train, test, max_iter, learning_rate=0.001):
+    def train(self, train, test, max_iter=1000, learning_rate=0.001):
         """ Train the model using ADAM optimizer.
 
         Parameters
@@ -191,6 +191,8 @@ class DocNADE():
         return prec
 
     def closest_words(self, word, n=10):
+        if self.word2idx is None or self.idx2word is None:
+            return "No word to index mappings provided"
         W_out = self.sess.run(self.W)
         w = W_out[self.word2idx[word], :]\
             .reshape(1, self.h_dim)
@@ -221,7 +223,7 @@ class DocNADE():
 
 
 class RSM():
-    def __init__(self, word2idx, idx2word, h_dim=50, input_dim=2000):
+    def __init__(self, input_dim, word2idx=None, idx2word=None, h_dim=50):
         """ Initiate parameters and weights for the Replicated Softmax.
 
         Parameters
@@ -253,7 +255,7 @@ class RSM():
         self.a_upd = np.zeros(self.h_dim)
         self.b_upd = np.zeros(input_dim)
 
-    def train(self, train, test, learning_rate=0.001, batch_size=100,
+    def train(self, train, learning_rate=0.001, batch_size=100,
               max_iter=1000, momentum=0.9):
         """ Start training the RSM. Uses Contrastive Divergece with 1 sampling
         step to approximate the gradients.
@@ -261,7 +263,6 @@ class RSM():
         Parameters
         ----------
         train : Matrix of training data.
-        test : Matrix of testing data.
         learning_rate : Learning rate for updating paramters.
         batch_size : Size of each training batch.
         max_iter : Maximum number of iterations in training.
@@ -279,7 +280,7 @@ class RSM():
 
                 # 1. Gibbs sample 1 time
                 # - from p(h|x)
-                h_1_prob = self._sigmoid(np.dot(x, self.W)
+                h_1_prob = self._sigmoid(x.dot(self.W)
                                          + np.outer(D, self.a))
                 h_1_sample = np.array(np.random.rand(v_batch_size, self.h_dim)
                                       < h_1_prob, dtype=int)
@@ -288,8 +289,8 @@ class RSM():
                 x_1_prob = np.exp(np.dot(h_1_sample, self.W.T) + self.b)
                 x_1_prob /= x_1_prob.sum(axis=1).reshape(v_batch_size, 1)
                 x_1_sample = np.zeros(x_1_prob.shape)
-                for i in xrange(v_batch_size):
-                    x_1_sample[i] = np.random.multinomial(D[i], x_1_prob[i])
+                for j in xrange(v_batch_size):
+                    x_1_sample[j] = np.random.multinomial(D[j], x_1_prob[j])
 
                 # - compute p(h|x)
                 h_2_prob = self._sigmoid(np.dot(x_1_sample, self.W)
@@ -297,14 +298,14 @@ class RSM():
 
                 # 2. Update parameters
                 self.W_upd *= momentum
-                self.W_upd += np.dot(x.T, h_1_prob)\
+                self.W_upd += x.transpose().dot(h_1_prob)\
                     - np.dot(x_1_sample.T, h_2_prob)
 
                 self.a_upd *= momentum
                 self.a_upd = h_1_prob.sum(axis=0) - h_2_prob.sum(axis=0)
 
                 self.b_upd *= momentum
-                self.b_upd = x.sum(axis=0) - x_1_sample.sum(axis=0)
+                self.b_upd = x.sum(axis=0).A1 - x_1_sample.sum(axis=0)
 
                 self.W += learning_rate * self.W_upd
                 self.a += learning_rate * self.a_upd
@@ -313,12 +314,15 @@ class RSM():
                 reconstruction_error.append(np.linalg.norm(x_1_sample - x)**2
                                             / (self.input_dim*v_batch_size))
 
+                if i % 100 == 0:
+                    print("Step: {}".format(i))
+
             print("Mean reconstrction error: {}"
                   .format(np.mean(reconstruction_error)))
 
             # Find closest word
-            print(self.closest_word("weapons"))
-            print(self.closest_word("books"))
+            # print(self.closest_word("weapons"))
+            # print(self.closest_word("books"))
 
             model = {'W': self.W,
                      'a': self.a,
@@ -442,6 +446,8 @@ class RSM():
         print(prec)
 
     def closest_word(self, word, n=10):
+        if self.word2idx is None or self.idx2word is None:
+            return "No word to index mapping provided"
         w = self.W[self.word2idx[word], :].reshape(1, self.h_dim)
         closest = distance.cdist(w, self.W, metric='cosine')[0].argsort()
         return self.idx2word[closest[:10]]
@@ -455,7 +461,7 @@ class RSM():
 
 
 class NVDM():
-    def __init__(self, word2idx, idx2word, input_dim=2000, h_dim=50,
+    def __init__(self, input_dim, word2idx=None, idx2word=None, h_dim=50,
                  embed_dim=500):
         """ Initate Tensorflow graph for the Neural Variational Document Model.
 
@@ -477,14 +483,15 @@ class NVDM():
         self.word2idx = word2idx
         self.idx2word = idx2word
         self.h_dim = h_dim
-        self.x = tf.placeholder(tf.float32, [None, input_dim], name="input")
-        v_batch_size = tf.shape(self.x)[0]
+        self.x_s = tf.sparse_placeholder(tf.float32, name="input")
+        v_batch_size = tf.shape(self.x_s)[0]
+        x = tf.sparse_tensor_to_dense(self.x_s, validate_indices=False)
 
         # Encoder -----------------------------------
         with tf.variable_scope("Encoder"):
             W1 = weight_variable([input_dim, embed_dim], name="W1")
             b1 = bias_variable([embed_dim], name="b1")
-            l1 = tf.nn.relu(tf.matmul(self.x, W1) + b1)
+            l1 = tf.nn.relu(tf.matmul(x, W1) + b1)
             W2 = weight_variable([embed_dim, embed_dim], name="W2")
             b2 = bias_variable([embed_dim], name="b2")
             l2 = tf.nn.relu(tf.matmul(l1, W2) + b2)
@@ -516,7 +523,7 @@ class NVDM():
                                                   tf.square(self.mu) -
                                                   tf.exp(log_sigma_sq), 1))
         # p(X|h) = sum(log(p_x_i)) for x_i in document
-        self.generator_loss = -tf.reduce_sum(self.x * p_x_i, 1)
+        self.generator_loss = -tf.reduce_sum(x * p_x_i, 1)
 
         self.total_loss = tf.reduce_mean(self.encoder_loss +
                                          self.generator_loss)
@@ -528,7 +535,7 @@ class NVDM():
         tf.scalar_summary('Total loss',
                           self.total_loss)
 
-        Nd = tf.reduce_sum(self.x, 1)  # Length of each document
+        Nd = tf.reduce_sum(x, 1)  # Length of each document
 
         # Used to calculate perplexity
         self.new_lower_bound = tf.reduce_mean((self.encoder_loss +
@@ -575,22 +582,21 @@ class NVDM():
             print("--- Epoch:", epoch)
             losses = []
             for i, batch_i in enumerate(batch(train, batch_size)):
-
+                feed = self.feed_from_sparse(batch_i)
                 if alternating:
                     self.sess.run([e_optimizer],
-                                  feed_dict={self.x: batch_i})
+                                  feed_dict={self.x_s: batch_i})
                     self.sess.run([g_optimizer],
-                                  feed_dict={self.x: batch_i})
+                                  feed_dict={self.x_s: batch_i})
                 else:
-                    self.sess.run([optimizer],
-                                  feed_dict={self.x: batch_i})
+                    _, loss = self.sess.run([optimizer, self.total_loss],
+                                            feed_dict=feed)
 
-                loss = self.sess.run([self.total_loss],
-                                     feed_dict={self.x: batch_i})
+                # loss = self.sess.run([self.total_loss],
+                #                      feed_dict={self.x: batch_i})
                 losses.append(loss)
                 if i % 2 == 0:
-                    summary = self.sess.run(merged_sum,
-                                            feed_dict={self.x: batch_i})
+                    summary = self.sess.run(merged_sum, feed_dict=feed)
                     writer.add_summary(summary, epoch)
                 if i % 10 == 0:
                     print("Step: {}, loss: {}".format(i, loss))
@@ -601,11 +607,16 @@ class NVDM():
                 self.saver.save(self.sess, "checkpoints/nvdm.ckpt")
 
             # Find closest words
-            print(self.closest_words("weapons"))
-            print(self.closest_words("books"))
+            # print(self.closest_words("weapons"))
+            # print(self.closest_words("books"))
 
             # Report crude perplexity
             print(self.perplexity(test))
+
+    def feed_from_sparse(self, data):
+        data = data.tocoo()
+        ind = np.vstack([data.row, data.col]).T
+        return {self.x_s: (ind, data.data, data.shape)}
 
     def perplexity(self, data, samples=1):
         """ Calculate perplexity using 1 or more samples of the hidden unit.
@@ -615,17 +626,16 @@ class NVDM():
         data : Matrix of data to calculate perplexity on.
         samples : Number of samples to use.
         """
+        feed = self.feed_from_sparse(data)
         if samples == 1:
-            return np.exp(self.sess.run(self.new_lower_bound,
-                                        feed_dict={self.x: data}))
+            return np.exp(self.sess.run(self.new_lower_bound, feed_dict=feed))
         else:
             losses = []
             for i in range(samples):
                 losses.append(self.sess.run(self.generator_loss,
-                                            feed_dict={self.x: data}))
+                                            feed_dict=feed))
             generator_loss = np.mean(losses, axis=0)
-            encoder_loss = self.sess.run(self.encoder_loss,
-                                         feed_dict={self.x: data})
+            encoder_loss = self.sess.run(self.encoder_loss, feed_dict=feed)
             D = data.sum(axis=1)
             total_loss = np.mean((generator_loss + encoder_loss) / D)
             return np.exp(total_loss)
@@ -674,10 +684,13 @@ class NVDM():
         return prec
 
     def closest_words(self, word, n=10):
+        if self.word2idx is None or self.idx2word is None:
+            return "No word to index mapping provided"
         R_out = self.sess.run(self.R)
         w = R_out[self.word2idx[word], :].reshape(1, self.h_dim)
         closest = distance.cdist(w, R_out, metric='cosine')[0].argsort()
         return self.idx2word[closest[:n]]
 
     def get_representation(self, data):
-        return self.sess.run(self.mu, feed_dict={self.x: data})
+        feed = self.feed_from_sparse(data)
+        return self.sess.run(self.mu, feed_dict=feed)
