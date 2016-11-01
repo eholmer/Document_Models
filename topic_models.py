@@ -48,11 +48,11 @@ class DocNADE():
 
         Parameters
         ----------
+        voc_size : Vocabulary size.
         word2idx : Dict with mappings from word to its' index in the input
                    vector.
         idx2word : Array where each index corresponds to a word.
         h_dim : Dimension of hidden units.
-        voc_size : Vocabulary size.
 
         Notes
         -----
@@ -70,16 +70,15 @@ class DocNADE():
         input_dim = tf.shape(self.x)[0]
 
         # Variables
-        self.variables = {}
         self.W = weight_variable([voc_size, h_dim], name="W")
         b = bias_variable([voc_size], name="b")
-        self.c = bias_variable([h_dim], name="c")
+        c = bias_variable([h_dim], name="c")
         V = weight_variable([h_dim, voc_size], name="V")
 
         # Flow
         W_cum = tf.pad(tf.cumsum(tf.gather(self.W, self.x[:-1])),
                        [[1, 0], [0, 0]])
-        W_cum += self.c
+        W_cum += c
         H = tf.sigmoid(W_cum)
         P = tf.nn.log_softmax(tf.matmul(H, V) + b)
         idx_flattened = tf.range(0, input_dim) * voc_size + self.x
@@ -87,8 +86,7 @@ class DocNADE():
         self.nll = tf.reduce_sum(-p_x_i)
 
         # Tensor for getting the representation of a document
-        self.rep = tf.sigmoid(tf.reduce_sum(tf.gather(self.W, self.x), 0)
-                              + self.c)
+        self.rep = tf.sigmoid(tf.reduce_sum(tf.gather(self.W, self.x), 0) + c)
 
         self.sess = tf.Session()
         self.saver = tf.train.Saver()
@@ -100,8 +98,8 @@ class DocNADE():
         ----------
         train : Matrix of training data.
         test : Matrix of testing data.
+        max_iter : Maximum number of epochs in training.
         learning_rate : Learning rate for updating paramters.
-        max_iter : Maximum number of iterations in training.
         """
         optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)\
             .minimize(self.nll)
@@ -228,11 +226,11 @@ class RSM():
 
         Parameters
         ----------
-        h_dim : Dimension of hidden unit.
         input_dim : Dimension of input vector.
         word2idx : Dict with mappings from word to its' index in the input
                    vector.
         idx2word : Array where each index corresponds to a word.
+        h_dim : Dimension of hidden unit.
 
         Notes
         -----
@@ -454,7 +452,7 @@ class RSM():
 
     def get_representation(self, data):
         D = data.sum(axis=1)
-        return self._sigmoid(np.dot(data, self.W) + np.outer(D, self.a))
+        return self._sigmoid(data.dot(self.W) + np.outer(D, self.a))
 
     def _sigmoid(self, x):
         return 1/(1 + np.exp(-x))
@@ -467,10 +465,10 @@ class NVDM():
 
         Parameters
         ----------
+        input_dim : Dimension of input data.
         word2idx : Dict with mappings from word to its' index in the input
         vector.
         idx2word : Array where each index corresponds to a word.
-        input_dim : Dimension of input data.
         h_dim : Dimension of hidden unit.
         embed_dim : Dimension of embedding layers.
 
@@ -503,11 +501,11 @@ class NVDM():
 
             self.mu = tf.matmul(l2, W_mu) + b_mu
             log_sigma_sq = tf.matmul(l2, W_sigma) + b_sigma
+            self.sigma = tf.sqrt(tf.exp(log_sigma_sq))
             eps = tf.random_normal((v_batch_size, h_dim), 0, 1,
                                    dtype=tf.float32)
 
-            sigma = tf.sqrt(tf.exp(log_sigma_sq))
-            h = self.mu + sigma*eps
+            h = self.mu + self.sigma*eps
 
         # Generator -------------------------------------
         with tf.variable_scope("Generator"):
@@ -528,35 +526,32 @@ class NVDM():
         self.total_loss = tf.reduce_mean(self.encoder_loss +
                                          self.generator_loss)
 
-        tf.scalar_summary('Encoder loss',
-                          tf.reduce_mean(self.encoder_loss))
-        tf.scalar_summary('Generator loss',
-                          tf.reduce_mean(self.generator_loss))
-        tf.scalar_summary('Total loss',
-                          self.total_loss)
-
         Nd = tf.reduce_sum(x, 1)  # Length of each document
 
         # Used to calculate perplexity
-        self.new_lower_bound = tf.reduce_mean((self.encoder_loss +
-                                               self.generator_loss) / Nd)
+        new_lower_bound = tf.reduce_mean((self.encoder_loss +
+                                          self.generator_loss) / Nd)
+        self.perp = tf.exp(new_lower_bound)
         self.sess = tf.Session()
         self.saver = tf.train.Saver()
 
-    def train(self, train, test, max_iter=1000, batch_size=100,
+    def train(self, train, valid, max_iter=1000, batch_size=100,
               alternating=False, learning_rate=0.001):
         """ Train the model using the ADAM optimizer.
 
         Parameters
         ----------
         train : Matrix of training data.
-        test : Matrix of testing data.
+        valid : Matrix of validation data.
         learning_rate : Learning rate for updating paramters.
         batch_size : Size of each training batch.
         max_iter : Maximum number of iterations in training.
         alternating : Whether or not to update one part of the network
                       (keeping the other part fixed), as in the paper.
         """
+        global_step = tf.Variable(0, trainable=False)
+        lr = tf.train.exponential_decay(learning_rate, global_step, 250, 1,
+                                        staircase=True)
 
         encoder_var_list, generator_var_list = [], []
         for var in tf.trainable_variables():
@@ -571,23 +566,43 @@ class NVDM():
         g_optimizer = tf.train.AdamOptimizer(learning_rate)\
             .minimize(self.total_loss, var_list=generator_var_list)
 
-        optimizer = tf.train.AdamOptimizer(learning_rate)\
-            .minimize(self.total_loss)
+        optimizer = tf.train.AdamOptimizer(lr)\
+            .minimize(self.total_loss, global_step=global_step)
 
         self.sess.run(tf.initialize_all_variables())
-        merged_sum = tf.merge_all_summaries()
-        writer = tf.train.SummaryWriter("./logs/", self.sess.graph)
 
+        tf.scalar_summary('Encoder loss',
+                          tf.reduce_mean(self.encoder_loss))
+        tf.scalar_summary('Generator loss',
+                          tf.reduce_mean(self.generator_loss))
+        tf.scalar_summary('Total loss',
+                          self.total_loss)
+        merged_sum = tf.merge_all_summaries()
+
+        perp = tf.scalar_summary('Perplexity', self.perplexity)
+        writer = tf.train.SummaryWriter("./logs/alt={}/batch_size={}/lr={}"
+                                        .format(alternating, batch_size,
+                                                learning_rate),
+                                        self.sess.graph)
+
+        from sklearn.utils import shuffle
         for epoch in range(0, max_iter):
             print("--- Epoch:", epoch)
             losses = []
+            train = shuffle(train)
+            if epoch/10 % 2 == 0:
+                print("Encoder optimizing")
+            else:
+                print("Decoder optimizing")
             for i, batch_i in enumerate(batch(train, batch_size)):
                 feed = self.feed_from_sparse(batch_i)
                 if alternating:
-                    self.sess.run([e_optimizer],
-                                  feed_dict={self.x_s: batch_i})
-                    self.sess.run([g_optimizer],
-                                  feed_dict={self.x_s: batch_i})
+                    if epoch/10 % 2 == 0:
+                        _, loss = self.sess.run([e_optimizer, self.total_loss],
+                                                feed_dict=feed)
+                    else:
+                        _, loss = self.sess.run([g_optimizer, self.total_loss],
+                                                feed_dict=feed)
                 else:
                     _, loss = self.sess.run([optimizer, self.total_loss],
                                             feed_dict=feed)
@@ -595,15 +610,19 @@ class NVDM():
                 # loss = self.sess.run([self.total_loss],
                 #                      feed_dict={self.x: batch_i})
                 losses.append(loss)
-                if i % 2 == 0:
-                    summary = self.sess.run(merged_sum, feed_dict=feed)
-                    writer.add_summary(summary, epoch)
-                if i % 10 == 0:
+                if i % 5000 == 0:
                     print("Step: {}, loss: {}".format(i, loss))
 
             print('--- Avg loss:', np.mean(losses))
+            if epoch % 2 == 0:
+                feed = self.feed_from_sparse(train)
+                summary = self.sess.run(merged_sum, feed_dict=feed)
+                writer.add_summary(summary, epoch)
 
             if epoch % 10 == 0:
+                feed = self.feed_from_sparse(valid)
+                summary = self.sess.run(perp, feed_dict=feed)
+                writer.add_summary(summary, epoch)
                 self.saver.save(self.sess, "checkpoints/nvdm.ckpt")
 
             # Find closest words
@@ -611,7 +630,7 @@ class NVDM():
             # print(self.closest_words("books"))
 
             # Report crude perplexity
-            print(self.perplexity(test))
+            # print(self.perplexity(valid))
 
     def feed_from_sparse(self, data):
         data = data.tocoo()
@@ -628,7 +647,7 @@ class NVDM():
         """
         feed = self.feed_from_sparse(data)
         if samples == 1:
-            return np.exp(self.sess.run(self.new_lower_bound, feed_dict=feed))
+            return self.sess.run(self.perp, feed_dict=feed)
         else:
             losses = []
             for i in range(samples):
@@ -694,3 +713,208 @@ class NVDM():
     def get_representation(self, data):
         feed = self.feed_from_sparse(data)
         return self.sess.run(self.mu, feed_dict=feed)
+
+
+class DeepDocNADE():
+    def __init__(self, voc_size, word2idx=None, idx2word=None, h_dim=50,
+                 activation='sigmoid'):
+        """ Initate Tensorflow graph for DeepDocNADE.
+
+        Parameters
+        ----------
+        voc_size : Vocabulary size.
+        word2idx : Dict with mappings from word to its' index in the input
+                   vector.
+        idx2word : Array where each index corresponds to a word.
+        h_dim : Dimension of hidden units.
+
+        Notes
+        -----
+        Based on:
+        Lauly, S., Zheng, Y., Allauzen, A., and Larochelle, H.
+        Document Neural Autoregressive Distribution Estimation
+        """
+
+        # Parameters
+        self.voc_size = voc_size
+        self.h_dim = h_dim
+        self.word2idx = word2idx
+        self.idx2word = idx2word
+        activations = {'sigmoid': tf.sigmoid,
+                       'tanh': tf.tanh}
+        activ = activations[activation]
+
+        self.x_s = tf.sparse_placeholder(tf.float32, name="Input")
+        x = tf.sparse_tensor_to_dense(self.x_s, validate_indices=False)
+
+        # Small hack to avoid all words ending up in "low". Solved by
+        # uniformly sampling one word for "high" to begin with and then
+        # proceeed as usual.
+        high = tf.one_hot(tf.squeeze(tf.multinomial(tf.log(x), 1)), voc_size)
+        nx = x - high
+        low = tf.floor(tf.random_uniform(tf.shape(nx)) * (nx + 1))
+        high = x - low
+        Dv = tf.reduce_sum(x, 1)
+        i = tf.reduce_sum(low, 1)
+
+        # Testing
+        self.x_test = tf.placeholder(tf.int32, shape=[None])
+        input_dim = tf.shape(self.x_test)[0]
+
+        # Variables
+        self.W = weight_variable([voc_size, h_dim], name="W")
+        b = bias_variable([voc_size], name="b")
+        c = bias_variable([h_dim], name="c")
+        V = weight_variable([h_dim, voc_size], name="V")
+
+        factor = 1./(Dv - i)
+
+        # Flow
+        h = activ(tf.matmul(low, self.W) + c)
+        p = tf.nn.log_softmax(tf.matmul(h, V) + b)
+        nll = tf.reduce_sum(-p * high, 1)
+        self.perp = tf.exp(tf.reduce_mean(nll * factor))
+        self.nll = tf.reduce_mean(Dv*factor*nll, 0)
+
+        # Test Flow
+        W_cum = tf.pad(tf.cumsum(tf.gather(self.W, self.x_test[:-1])),
+                       [[1, 0], [0, 0]])
+        W_cum += c
+        H = activ(W_cum)
+        P = tf.nn.log_softmax(tf.matmul(H, V) + b)
+        idx_flattened = tf.range(0, input_dim) * voc_size + self.x_test
+        p_x_i = tf.gather(tf.reshape(P, [-1]), idx_flattened)
+        self.nll_test = tf.reduce_sum(-p_x_i)
+
+        # Representation of Documents
+        self.rep = activ(tf.matmul(x, self.W) + c)
+
+        self.sess = tf.Session()
+        self.saver = tf.train.Saver()
+
+    def train(self, train, test, max_iter=1000, learning_rate=0.001):
+        """ Train the model using ADAM optimizer.
+
+        Parameters
+        ----------
+        train : Matrix of training data.
+        test : Matrix of testing data.
+        max_iter : Maximum number of iterations in training.
+        learning_rate : Learning rate for updating paramters.
+        """
+        optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)\
+            .minimize(self.nll)
+
+        best = np.inf
+        self.sess.run(tf.initialize_all_variables())
+        for epoch in range(max_iter):
+            losses = []
+            print("-------Epoch: {}".format(epoch))
+            for j, doc in enumerate(batch(train, 100)):
+                # for j, doc in enumerate(train):
+                feed = self.feed_from_sparse(doc)
+                _, loss = self.sess.run([optimizer, self.nll],
+                                        feed_dict=feed)
+                losses.append(loss)
+
+            print("Loss: {}".format(np.mean(losses)))
+            if epoch % 10 == 0:
+                perplexity = self.perplexity(test, False)
+                print("Perplexity: {}".format(perplexity))
+                if perplexity < best:
+                    self.saver.save(self.sess, "checkpoints/deep_docnade.ckpt")
+                    best = perplexity
+                print("Closest to \"weapons\":")
+                print(self.closest_words("weapons"))
+
+                print("Closest to \"books\":")
+                print(self.closest_words("books"))
+
+    def restore(self, path):
+        """ Restores a previous model from path.
+
+        Parameters
+        ----------
+        path : Path to the stored model.
+        """
+        self.saver.restore(self.sess, path)
+
+    def perplexity(self, data, test=False, ensembles=1):
+        """ Calculate perplexity using 1 or more samples of the hidden unit.
+
+        Parameters
+        ----------
+        data : Matrix of data to calculate perplexity on.
+        test : Whether or not to perform exact perplexity calculation.
+        ensembles : Number of ensembles to use for perplexity calculation.
+        """
+        if test:
+            perps = []
+            for doc in data:
+                if len(doc) == 0:
+                    continue
+                losses = []
+                for i in range(ensembles):
+                    np.random.shuffle(doc)
+                    loss = self.sess.run(self.nll_test,
+                                         feed_dict={self.x_test: doc})
+                    losses.append(-loss)
+                ensemble_loss = -1*(logsumexp(losses)
+                                    - np.log(ensembles))*1./len(doc)
+                perps.append(ensemble_loss)
+            return np.exp(np.mean(perps))
+        else:
+            feed = self.feed_from_sparse(data)
+            return self.sess.run(self.perp, feed_dict=feed)
+
+    def ir(self, train, test, train_target, test_target):
+        """ Perform Information Retrieval test. Measures the precision for
+        different pre-defined Recall rates.
+
+        Parameters
+        ----------
+        train : Matrix of training samples.
+        test : Matrix of testing samples.
+        train_target : Array of target labels for each training sample.
+        test_target : Array of target labels for each testing sample.
+        """
+
+        fracs = np.rint(np.array([0.0002, 0.001, 0.004, 0.016, 0.064, 0.256])
+                        * len(train_target))
+        print("Getting train representations")
+        train_rep = self.get_representation(train)
+
+        print("Getting test representations")
+        test_rep = self.get_representation(test)
+
+        print("Calculating distance")
+        closest = distance.cdist(test_rep, train_rep, metric='cosine')\
+            .argsort(axis=1)
+        closest_t = []
+        for row in closest:
+            closest_t.append(train_target[row].flatten())
+        test_target = np.reshape(test_target, (len(test_target), 1))
+        correct = np.mean(closest_t == test_target, axis=0)
+        prec = []
+        for frac in fracs:
+            subset = correct[:frac+1]
+            prec.append(np.mean(subset))
+        return prec
+
+    def closest_words(self, word, n=10):
+        if self.word2idx is None or self.idx2word is None:
+            return "No word to index mappings provided"
+        W_out = self.sess.run(self.W)
+        w = W_out[self.word2idx[word], :]\
+            .reshape(1, self.h_dim)
+        closest = distance.cdist(w, W_out, metric='cosine')[0].argsort()
+        return self.idx2word[closest[:n]]
+
+    def get_representation(self, data):
+        feed = self.feed_from_sparse(data)
+        return self.sess.run(self.rep, feed_dict=feed)
+
+    def feed_from_sparse(self, data):
+        data = data.tocoo()
+        ind = np.vstack([data.row, data.col]).T
+        return {self.x_s: (ind, data.data, data.shape)}
