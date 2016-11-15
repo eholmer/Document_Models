@@ -1,3 +1,4 @@
+from __future__ import print_function
 from topic_models import DocNADE, RSM, NVDM, DeepDocNADE
 import numpy as np
 import scipy.sparse as sp

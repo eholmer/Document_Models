@@ -1,8 +1,9 @@
+from __future__ import print_function
 import numpy as np
 import tensorflow as tf
 from scipy.spatial import distance
 from scipy.misc import logsumexp
-import cPickle as pickle
+import pickle
 
 
 def weight_variable(shape, name=None):
@@ -818,17 +819,16 @@ class DeepDocNADE():
                 losses.append(loss)
 
             print("Loss: {}".format(np.mean(losses)))
-            if epoch % 10 == 0:
-                perplexity = self.perplexity(test, False)
-                print("Perplexity: {}".format(perplexity))
-                if perplexity < best:
-                    self.saver.save(self.sess, "checkpoints/deep_docnade.ckpt")
-                    best = perplexity
-                print("Closest to \"weapons\":")
-                print(self.closest_words("weapons"))
+            perplexity = self.perplexity(test, False)
+            print("Perplexity: {}".format(perplexity))
+            if perplexity < best:
+                self.saver.save(self.sess, "checkpoints/deep_docnade.ckpt")
+                best = perplexity
+            # print("Closest to \"weapons\":")
+            # print(self.closest_words("weapons"))
 
-                print("Closest to \"books\":")
-                print(self.closest_words("books"))
+            # print("Closest to \"books\":")
+            # print(self.closest_words("books"))
 
     def restore(self, path):
         """ Restores a previous model from path.
