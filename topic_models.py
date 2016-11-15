@@ -580,7 +580,7 @@ class NVDM():
                           self.total_loss)
         merged_sum = tf.merge_all_summaries()
 
-        perp = tf.scalar_summary('Perplexity', self.perplexity)
+        perp = tf.scalar_summary('Perplexity', self.perp)
         writer = tf.train.SummaryWriter("./logs/alt={}/batch_size={}/lr={}"
                                         .format(alternating, batch_size,
                                                 learning_rate),
