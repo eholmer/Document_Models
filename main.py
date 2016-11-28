@@ -1,9 +1,11 @@
 from __future__ import print_function
-from topic_models import DocNADE, RSM, NVDM, DeepDocNADE
+from topic_models import DocNADE, RSM, NVDM, DeepDocNADE, VAENADE
 import numpy as np
 import scipy.sparse as sp
 from sklearn import linear_model, metrics 
 from sklearn.utils import shuffle
+from sklearn.datasets import load_svmlight_file
+import pickle
 
 
 def load_data(input_file):
@@ -12,6 +14,23 @@ def load_data(input_file):
                          npzfile['indptr']),
                         shape=tuple(list(npzfile['shape'])))
     return mat
+
+
+def load_seq():
+    train, train_target = load_svmlight_file('data/sequence/train_log')
+    test, test_target = load_svmlight_file('data/sequence/test_log')
+    with open('data/sequence/seq_train', 'r') as f:
+        dump = pickle.load(f)
+        train_seq = dump['X']
+    with open('data/sequence/seq_test', 'r') as f:
+        dump = pickle.load(f)
+        test_seq = dump['X']
+    with open('data/sequence/meta_data', 'r') as f:
+        dump = pickle.load(f)
+        word2idx = dump['w2i']
+        idx2word = dump['i2w']
+    return (train, train_seq, train_target, test, test_seq, test_target,
+            word2idx, idx2word)
 
 
 def load_20ng():
@@ -50,6 +69,8 @@ def load_reuters():
 # Bag of words vectors for NVDM and RSM.
 # Sequence of word-indicies for DocNADE
 
+(train, train_seq, train_target, test, test_seq, test_target,
+ word2idx, idx2word) = load_seq()
 # (train, train_target, validation, validation_target, test, test_target,
 #  idx2word, word2idx) = load_20ng()
 
@@ -122,6 +143,9 @@ def load_reuters():
 # print(ddn.perplexity(valid_dn, True))
 # print(ddn.ir(train, test, train_target, test_target))
 
+# VAENADE
+# vn = VAENADE(voc_dim=train.shape[1])
+# vn.train(train, train_seq)
 # X_train = nvdm.get_representation(train)
 # X_test = nvdm.get_representation(test)
 # logistic = linear_model.LogisticRegression()
