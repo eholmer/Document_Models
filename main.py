@@ -17,15 +17,15 @@ def load_data(input_file):
 
 
 def load_seq():
-    train, train_target = load_svmlight_file('data/sequence/train_log')
-    test, test_target = load_svmlight_file('data/sequence/test_log')
-    with open('data/sequence/seq_train', 'r') as f:
+    train, train_target = load_svmlight_file('data/20ng_seq/train_log')
+    test, test_target = load_svmlight_file('data/20ng_seq/test_log')
+    with open('data/20ng_seq/seq_train', 'r') as f:
         dump = pickle.load(f)
         train_seq = dump['X']
-    with open('data/sequence/seq_test', 'r') as f:
+    with open('data/20ng_seq/seq_test', 'r') as f:
         dump = pickle.load(f)
         test_seq = dump['X']
-    with open('data/sequence/meta_data', 'r') as f:
+    with open('data/20ng_seq/meta_data', 'r') as f:
         dump = pickle.load(f)
         word2idx = dump['w2i']
         idx2word = dump['i2w']
