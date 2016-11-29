@@ -68,7 +68,6 @@ class DocNADE():
         self.idx2word = idx2word
 
         self.x = tf.placeholder(tf.int32, [None], name="input")
-        input_dim = tf.shape(self.x)[0]
 
         # Variables
         self.W = weight_variable([voc_size, h_dim], name="W")
@@ -81,10 +80,9 @@ class DocNADE():
                        [[1, 0], [0, 0]])
         W_cum += c
         H = tf.sigmoid(W_cum)
-        P = tf.nn.log_softmax(tf.matmul(H, V) + b)
-        idx_flattened = tf.range(0, input_dim) * voc_size + self.x
-        p_x_i = tf.gather(tf.reshape(P, [-1]), idx_flattened)
-        self.nll = tf.reduce_sum(-p_x_i)
+        softmax = tf.nn.sparse_softmax_cross_entropy_with_logits
+        p_x_i = softmax(tf.matmul(H, V) + b, self.x)
+        self.nll = tf.reduce_sum(p_x_i)
 
         # Tensor for getting the representation of a document
         self.rep = tf.sigmoid(tf.reduce_sum(tf.gather(self.W, self.x), 0) + c)
@@ -760,7 +758,6 @@ class DeepDocNADE():
 
         # Testing
         self.x_test = tf.placeholder(tf.int32, shape=[None])
-        input_dim = tf.shape(self.x_test)[0]
 
         # Variables
         self.W = weight_variable([voc_size, h_dim], name="W")
@@ -782,10 +779,9 @@ class DeepDocNADE():
                        [[1, 0], [0, 0]])
         W_cum += c
         H = activ(W_cum)
-        P = tf.nn.log_softmax(tf.matmul(H, V) + b)
-        idx_flattened = tf.range(0, input_dim) * voc_size + self.x_test
-        p_x_i = tf.gather(tf.reshape(P, [-1]), idx_flattened)
-        self.nll_test = tf.reduce_sum(-p_x_i)
+        softmax = tf.nn.sparse_softmax_cross_entropy_with_logits
+        p_x_i = softmax(tf.matmul(H, V) + b, self.x_test)
+        self.nll_test = tf.reduce_sum(p_x_i)
 
         # Representation of Documents
         self.rep = activ(tf.matmul(x, self.W) + c)
@@ -953,7 +949,7 @@ class VAENADE():
             # Encoder loss is KL-divergence -->
             self.e_loss = -0.5 * (tf.reduce_sum(1 + log_sigma_sq -
                                                 tf.square(self.mu) -
-                                                tf.exp(log_sigma_sq), 1,
+                                                tf.exp(log_sigma_sq),
                                                 name="Encoder_loss"))
 
             # Sample latent variable and tile it `seq_len` times -->
@@ -983,17 +979,14 @@ class VAENADE():
             # encoder.
             h_concat = tf.concat(1, [h_windows, h], name="h_concat")
 
-            # Decoder loss is negative log-likelihood. This is kind of a hack
-            # to extract the correct word index from each row of P. Eagerly
-            # awating support for numpy-style advanced indexing in TF.
-            P = tf.nn.log_softmax(tf.matmul(h_concat, W_softm) + b_softm,
-                                  name="Softmax_P")
-            idx_flattened = tf.add(tf.range(0, seq_len) * voc_dim, self.x_seq,
-                                   name="flat_idx")
-            p_x_i = tf.gather(tf.reshape(P, [-1]), idx_flattened, name="p_x_i")
-            self.g_loss = tf.reduce_sum(-p_x_i, name="Decoder_loss")
+            # Decoder loss is negative log-likelihood.
+            softmax = tf.nn.sparse_softmax_cross_entropy_with_logits
+            p_x_i = softmax(tf.matmul(h_concat, W_softm) + b_softm,
+                            self.x_seq, name="Cross_entropy")
 
-        self.tot_loss = tf.reduce_mean(self.e_loss + self.g_loss)
+            self.g_loss = tf.reduce_sum(p_x_i, name="Decoder_loss")
+
+        self.tot_loss = self.e_loss + self.g_loss
 
         self.sess = tf.Session()
         self.saver = tf.train.Saver()
@@ -1031,5 +1024,5 @@ class VAENADE():
                 continue
             feed = {self.x_bow: data[i].toarray(), self.x_seq: data_seq[i]}
             loss = self.sess.run(self.tot_loss, feed)
-            perps.append(loss/len(data_seq[i]))
+            perps.append(loss/data[i].sum())
         return np.exp(np.mean(perps))
