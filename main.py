@@ -6,6 +6,7 @@ from sklearn import linear_model, metrics
 from sklearn.utils import shuffle
 from sklearn.datasets import load_svmlight_file
 import pickle
+import ujson
 
 
 def load_data(input_file):
@@ -17,15 +18,33 @@ def load_data(input_file):
 
 
 def load_seq():
-    sub = 'reuters_seq'
-    train, train_target = load_svmlight_file('data/' + sub + '/train')
-    test, test_target = load_svmlight_file('data/' + sub + '/test')
-    with open('data/' + sub + '/seq_train', 'r') as f:
-        dump = pickle.load(f)
-        train_seq = dump['X']
-    with open('data/' + sub + '/seq_test', 'r') as f:
-        dump = pickle.load(f)
-        test_seq = dump['X']
+    # sub = 'reuters_seq'
+    sub = 'reuters_big_seq'
+    # sub = '20ng_seq'
+    if sub == 'reuters_big_seq':
+        split = 10000
+        data = load_data('data/' + sub + '/data.npz')
+        data_target = load_data('data/' + sub + '/data_lbl.npz')
+        train = data[:-split]
+        train_target = data_target[:-split]
+        test = data[-split:]
+        test_target = data_target[-split:]
+        print("Reading sequence train")
+        with open('data/' + sub + '/seq_data', 'r') as f:
+            dump = ujson.load(f)
+            data = dump['X']
+            train_seq = data[:-split]
+            test_seq = data[-split:]
+        print(train.shape, test.shape)
+    else:
+        train, train_target = load_svmlight_file('data/' + sub + '/train')
+        test, test_target = load_svmlight_file('data/' + sub + '/test')
+        with open('data/' + sub + '/seq_train', 'r') as f:
+            dump = pickle.load(f)
+            train_seq = dump['X']
+        with open('data/' + sub + '/seq_test', 'r') as f:
+            dump = pickle.load(f)
+            test_seq = dump['X']
     with open('data/' + sub + '/meta_data', 'r') as f:
         dump = pickle.load(f)
         word2idx = dump['w2i']
