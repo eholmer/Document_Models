@@ -1026,3 +1026,55 @@ class VAENADE():
             loss = self.sess.run(self.tot_loss, feed)
             perps.append(loss/data[i].sum())
         return np.exp(np.mean(perps))
+
+    def restore(self, path):
+        """ Restores a previous model from path.
+
+        Parameters
+        ----------
+        path : Path to the stored model.
+        """
+        self.saver.restore(self.sess, path)
+
+    def get_representation(self, data):
+        rep = []
+        for doc in data:
+            feed = {self.x_bow: doc.toarray()}
+            r = self.sess.run(self.mu, feed)
+            rep.append(r.flatten())
+        return np.array(rep)
+
+    def ir(self, train, test, train_target, test_target):
+        """ Perform Information Retrieval test. Measures the precision for
+        different pre-defined Recall rates.
+
+        Parameters
+        ----------
+        train : Matrix of training samples.
+        test : Matrix of testing samples.
+        train_target : Array of target labels for each training sample.
+        test_target : Array of target labels for each testing sample.
+        """
+        fracs = np.rint(np.array([0.0002, 0.001, 0.004, 0.016, 0.064, 0.256])
+                        * len(train_target))
+
+        print("Getting train representations")
+        train_rep = self.get_representation(train)
+        print(train_rep)
+
+        print("Getting test representations")
+        test_rep = self.get_representation(test)
+
+        print("Calculating distance")
+        closest = distance.cdist(test_rep, train_rep, metric='cosine')\
+            .argsort(axis=1)
+        closest_t = []
+        for row in closest:
+            closest_t.append(train_target[row].flatten())
+        test_target = np.reshape(test_target, (len(test_target), 1))
+        correct = np.mean(closest_t == test_target, axis=0)
+        prec = []
+        for frac in fracs:
+            subset = correct[:frac+1]
+            prec.append(np.mean(subset))
+        return prec
