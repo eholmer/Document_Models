@@ -43,6 +43,57 @@ def batch(iterable, n=1):
         yield iterable[ndx:min(ndx + n, l)]
 
 
+def ir(train, test, train_target, test_target, model,
+       intervals=[0.0002, 0.001, 0.004, 0.016, 0.064, 0.256],
+       multi_label=False):
+    """ Perform Information Retrieval test. Measures the precision for
+    different pre-defined Recall rates.
+
+    Parameters
+    ----------
+    train : Matrix of training samples.
+    test : Matrix of testing samples.
+    train_target : Array of target labels for each training sample.
+    test_target : Array of target labels for each testing sample.
+    intervals : List of recall rates.
+    get_representation : function to get representations for documents.
+    """
+    fracs = np.rint(np.array(intervals) * train_target.shape[0])
+
+    print("Getting train representations")
+    train_rep = model.get_representation(train)
+
+    print("Getting test representations")
+    test_rep = model.get_representation(test)
+
+    print("Calculating distance")
+    closest = distance.cdist(test_rep, train_rep, metric='cosine')\
+        .argsort(axis=1)
+    if multi_label:
+        closest_t = []
+        for i, row in enumerate(closest):
+            closest_t.append(np.mean(test_target[i] * train_target[row],
+                                     axis=1))
+        correct = np.mean(closest_t, axis=0)
+    else:
+        closest_t = []
+        for row in closest:
+            closest_t.append(train_target[row].flatten())
+        test_target = np.reshape(test_target, (len(test_target), 1))
+        correct = np.mean(closest_t == test_target, axis=0)
+    prec = []
+    for frac in fracs:
+        subset = correct[:frac+1]
+        prec.append(np.mean(subset))
+    return prec
+
+
+def feed_from_sparse(data, target):
+    data = data.tocoo()
+    ind = np.vstack([data.row, data.col]).T
+    return {target: (ind, data.data, data.shape)}
+
+
 class DocNADE():
     def __init__(self, voc_size, word2idx=None, idx2word=None, h_dim=50):
         """ Initate Tensorflow graph for DocNADE.
@@ -85,7 +136,9 @@ class DocNADE():
         self.nll = tf.reduce_sum(p_x_i)
 
         # Tensor for getting the representation of a document
-        self.rep = tf.sigmoid(tf.reduce_sum(tf.gather(self.W, self.x), 0) + c)
+        self.x_batch = tf.sparse_placeholder(tf.float32)
+        x = tf.sparse_tensor_to_dense(self.x_batch, validate_indices=False)
+        self.rep = tf.sigmoid(tf.matmul(x, self.W) + c)
 
         self.sess = tf.Session()
         self.saver = tf.train.Saver()
@@ -198,9 +251,10 @@ class DocNADE():
 
     def get_representation(self, data):
         reps = []
-        for doc in data:
-            reps.append(self.sess.run(self.rep, feed_dict={self.x: doc}))
-        return np.array(reps)
+        for b in batch(data, 10000):
+            feed = feed_from_sparse(b, self.x_batch)
+            reps.append(self.sess.run(self.rep, feed))
+        return np.vstack(reps)
 
     def wiki_test(self):
         with open('data/wiki', 'r') as f:
@@ -1005,7 +1059,8 @@ class VAENADE():
             print("--- Epoch:", epoch)
             losses = []
             for i in range(0, num_docs):
-                feed = {self.x_bow: train[i].toarray(), self.x_seq: train_seq[i]}
+                feed = {self.x_bow: train[i].toarray(),
+                        self.x_seq: train_seq[i]}
                 _, loss = self.sess.run([optimizer, self.tot_loss], feed)
                 losses.append(loss)
                 if i % 500 == 0:

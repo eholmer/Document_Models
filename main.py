@@ -1,5 +1,5 @@
 from __future__ import print_function
-from topic_models import DocNADE, RSM, NVDM, DeepDocNADE, VAENADE
+from topic_models import DocNADE, RSM, NVDM, DeepDocNADE, VAENADE, ir
 import numpy as np
 import scipy.sparse as sp
 from sklearn import linear_model, metrics 
@@ -128,13 +128,13 @@ def load_reuters():
 
 # Use models.
 # DocNADE
-# dn = DocNADE(voc_size=train.shape[1])
-# dn.restore('checkpoints/docnade_p=875.ckpt')
+dn = DocNADE(voc_size=train.shape[1])
+dn.restore('checkpoints/docnade_r2_p=485.ckpt')
 # dn.wiki_test()
 # dn.train(train_dn, valid_dn)
 # print(dn.closest_words("medical"))
 # print(dn.perplexity(test_dn))
-# print(dn.ir(train_dn, test_dn, train_target, test_target))
+print(ir(train, test, train_target, test_target, dn))
 
 # RSM
 # rsm = RSM(input_dim=train.shape[1])
