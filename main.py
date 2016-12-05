@@ -29,13 +29,15 @@ def load_seq():
         train_target = data_target[:-split]
         test = data[-split:]
         test_target = data_target[-split:]
-        print("Reading sequence train")
-        with open('data/' + sub + '/seq_data', 'r') as f:
-            dump = ujson.load(f)
-            data = dump['X']
-            train_seq = data[:-split]
-            test_seq = data[-split:]
-        print(train.shape, test.shape)
+        train_seq = []
+        test_seq = []
+        # print("Reading sequence train")
+        # with open('data/' + sub + '/seq_data', 'r') as f:
+        #     dump = ujson.load(f)
+        #     data = dump['X']
+        #     train_seq = data[:-split]
+        #     test_seq = data[-split:]
+        # print(train.shape, test.shape)
     else:
         train, train_target = load_svmlight_file('data/' + sub + '/train')
         test, test_target = load_svmlight_file('data/' + sub + '/test')
@@ -84,6 +86,19 @@ def load_reuters():
     test, test_target = shuffle(test, test_target)
     return (train, train_target, validation, validation_target, test,
             test_target)
+
+
+def evaluate_ir(queries, name):
+    # intervals = [0.0002, 0.001, 0.004, 0.016, 0.064, 0.256]
+    intervals = [0.00001, 0.00006, 0.00051, 0.004, 0.016, 0.064, 0.256]
+    with open(name, 'wb') as f:
+        ujson.dump(queries, f)
+    frac = np.array(intervals * train.shape[1])
+    prec = []
+    for i in frac:
+        subset = queries[:i+1]
+        prec.append(np.mean(subset))
+    return prec
 
 # Load data-------------------------------------
 # Bag of words vectors for NVDM and RSM.
@@ -134,8 +149,8 @@ dn.restore('checkpoints/docnade_r2_p=485.ckpt')
 # dn.train(train_dn, valid_dn)
 # print(dn.closest_words("medical"))
 # print(dn.perplexity(test_dn))
-print(ir(train, test, train_target, test_target, dn))
-
+queries = ir(train, test, train_target, test_target, dn, multi_label=True)
+print(evaluate_ir(queries, 'docnade_q'))
 # RSM
 # rsm = RSM(input_dim=train.shape[1])
 # rsm.restore('checkpoints/rsm_p=975.ckpt')
@@ -146,12 +161,12 @@ print(ir(train, test, train_target, test_target, dn))
 
 # NVDM
 # nvdm = NVDM(input_dim=train.shape[1], word2idx=word2idx, idx2word=idx2word)
-# nvdm.restore('checkpoints/nvdm.ckpt')
+# nvdm.restore('checkpoints/nvdm_20seq.ckpt')
 # nvdm.train(train, test, alternating=True, learning_rate=0.0005, max_iter=10000,
 #            batch_size=10)
 # print(nvdm.closest_words("medical"))
 # print(nvdm.get_perplexity(test))
-# print(nvdm.ir(train, test, train_target, test_target))
+# print(ir(train, test, train_target, test_target, nvdm))
 
 # DeepDocNADE
 # ddn = DeepDocNADE(word2idx=word2idx, idx2word=idx2word, voc_size=2000)
@@ -161,7 +176,7 @@ print(ir(train, test, train_target, test_target, dn))
 # print(ddn.perplexity(test, False))
 # print(ddn.perplexity(test_dn, True, ensembles=1))
 # print(ddn.perplexity(valid_dn, True))
-# print(ddn.ir(train, test, train_target, test_target))
+# print(ir(train, test, train_target, test_target, ddn))
 
 # VAENADE
 # vn = VAENADE(voc_dim=train.shape[1])
