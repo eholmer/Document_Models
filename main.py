@@ -28,9 +28,7 @@ def load_seq():
         train_target = data_target[:-split]
         test = data[-split:]
         test_target = data_target[-split:]
-        train_seq = []
-        test_seq = []
-        print("Reading sequence train")
+        print("Reading sequence")
         with open('data/' + sub + '/seq_data', 'r') as f:
             data = ujson.load(f)
             train_seq = data[:-split]
@@ -86,10 +84,10 @@ def load_reuters():
 def evaluate_ir(queries):
     # intervals = [0.0002, 0.001, 0.004, 0.016, 0.064, 0.256]
     intervals = [0.00001, 0.00006, 0.00051, 0.004, 0.016, 0.064, 0.256]
-    frac = np.array(intervals) * train.shape[1]
+    frac = np.array(intervals) * train.shape[0]
     prec = []
     for i in frac:
-        subset = queries[:i+1]
+        subset = queries[:int(i+1)]
         prec.append(np.mean(subset))
     return prec
 
@@ -169,15 +167,17 @@ def dump(data, name):
 # queries = ir(train, test, train_target, test_target, nvdm)
 
 # DeepDocNADE
-# ddn = DeepDocNADE(word2idx=word2idx, idx2word=idx2word, voc_size=2000)
+# ddn = DeepDocNADE(word2idx=word2idx, idx2word=idx2word, voc_size=train.shape[1])
 # ddn.train(train, validation, learning_rate=0.0005)
-# ddn.restore('checkpoints/deep_docnade.ckpt')
+# ddn.restore('best_ckpt/deep_docnade_20ng.ckpt')
 # ddn.restore('checkpoints/docnade_p=818.ckpt')
-# print(ddn.perplexity(test, False))
+# print(ddn.perplexity(test_seq, True, ensembles=16))
 # print(ddn.perplexity(test_dn, True, ensembles=1))
 # print(ddn.perplexity(valid_dn, True))
 # queries = ir(train, test, train_target, test_target, ddn)
 
 # VAENADE
-# vn = VAENADE(voc_dim=train.shape[1])
+vn = VAENADE(voc_dim=train.shape[1])
 # vn.train(train, train_seq)
+vn.restore('best_ckpt/vaenade_reuters.ckpt')
+print(vn.perplexity(test, test_seq))
