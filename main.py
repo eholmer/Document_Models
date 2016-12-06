@@ -86,7 +86,7 @@ def load_reuters():
 def evaluate_ir(queries):
     # intervals = [0.0002, 0.001, 0.004, 0.016, 0.064, 0.256]
     intervals = [0.00001, 0.00006, 0.00051, 0.004, 0.016, 0.064, 0.256]
-    frac = np.array(intervals * train.shape[1])
+    frac = np.array(intervals) * train.shape[1]
     prec = []
     for i in frac:
         subset = queries[:i+1]
