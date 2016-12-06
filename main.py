@@ -5,7 +5,6 @@ import scipy.sparse as sp
 from sklearn import linear_model, metrics 
 from sklearn.utils import shuffle
 from sklearn.datasets import load_svmlight_file
-import pickle
 import ujson
 
 
@@ -31,24 +30,20 @@ def load_seq():
         test_target = data_target[-split:]
         train_seq = []
         test_seq = []
-        # print("Reading sequence train")
-        # with open('data/' + sub + '/seq_data', 'r') as f:
-        #     dump = ujson.load(f)
-        #     data = dump['X']
-        #     train_seq = data[:-split]
-        #     test_seq = data[-split:]
-        # print(train.shape, test.shape)
+        print("Reading sequence train")
+        with open('data/' + sub + '/seq_data', 'r') as f:
+            data = ujson.load(f)
+            train_seq = data[:-split]
+            test_seq = data[-split:]
     else:
         train, train_target = load_svmlight_file('data/' + sub + '/train')
         test, test_target = load_svmlight_file('data/' + sub + '/test')
         with open('data/' + sub + '/seq_train', 'r') as f:
-            dump = pickle.load(f)
-            train_seq = dump['X']
+            train_seq = ujson.load(f)
         with open('data/' + sub + '/seq_test', 'r') as f:
-            dump = pickle.load(f)
-            test_seq = dump['X']
+            test_seq = ujson.load(f)
     with open('data/' + sub + '/meta_data', 'r') as f:
-        dump = pickle.load(f)
+        dump = ujson.load(f)
         word2idx = dump['w2i']
         idx2word = dump['i2w']
     return (train, train_seq, train_target, test, test_seq, test_target,
@@ -88,11 +83,9 @@ def load_reuters():
             test_target)
 
 
-def evaluate_ir(queries, name):
+def evaluate_ir(queries):
     # intervals = [0.0002, 0.001, 0.004, 0.016, 0.064, 0.256]
     intervals = [0.00001, 0.00006, 0.00051, 0.004, 0.016, 0.064, 0.256]
-    with open(name, 'wb') as f:
-        ujson.dump(queries, f)
     frac = np.array(intervals * train.shape[1])
     prec = []
     for i in frac:
@@ -100,12 +93,17 @@ def evaluate_ir(queries, name):
         prec.append(np.mean(subset))
     return prec
 
+
+def dump(data, name):
+    with open(name, 'wb') as f:
+        ujson.dump(data, f)
+
 # Load data-------------------------------------
 # Bag of words vectors for NVDM and RSM.
 # Sequence of word-indicies for DocNADE
 
-(train, train_seq, train_target, test, test_seq, test_target,
- word2idx, idx2word) = load_seq()
+# (train, train_seq, train_target, test, test_seq, test_target,
+#  word2idx, idx2word) = load_seq()
 # (train, train_target, validation, validation_target, test, test_target,
 #  idx2word, word2idx) = load_20ng()
 
@@ -143,14 +141,16 @@ def evaluate_ir(queries, name):
 
 # Use models.
 # DocNADE
-dn = DocNADE(voc_size=train.shape[1])
-dn.restore('checkpoints/docnade_r2_p=485.ckpt')
+# dn = DocNADE(voc_size=train.shape[1])
+# dn.restore('checkpoints/docnade_r2_p=485.ckpt')
 # dn.wiki_test()
 # dn.train(train_dn, valid_dn)
 # print(dn.closest_words("medical"))
 # print(dn.perplexity(test_dn))
-queries = ir(train, test, train_target, test_target, dn, multi_label=True)
-print(evaluate_ir(queries, 'docnade_q'))
+# queries = ir(train, test, train_target, test_target, dn, multi_label=True)
+# dump(queris, 'docnade_q')
+# print(evaluate_ir(queries))
+
 # RSM
 # rsm = RSM(input_dim=train.shape[1])
 # rsm.restore('checkpoints/rsm_p=975.ckpt')
@@ -166,7 +166,7 @@ print(evaluate_ir(queries, 'docnade_q'))
 #            batch_size=10)
 # print(nvdm.closest_words("medical"))
 # print(nvdm.get_perplexity(test))
-# print(ir(train, test, train_target, test_target, nvdm))
+# queries = ir(train, test, train_target, test_target, nvdm)
 
 # DeepDocNADE
 # ddn = DeepDocNADE(word2idx=word2idx, idx2word=idx2word, voc_size=2000)
@@ -176,16 +176,8 @@ print(evaluate_ir(queries, 'docnade_q'))
 # print(ddn.perplexity(test, False))
 # print(ddn.perplexity(test_dn, True, ensembles=1))
 # print(ddn.perplexity(valid_dn, True))
-# print(ir(train, test, train_target, test_target, ddn))
+# queries = ir(train, test, train_target, test_target, ddn)
 
 # VAENADE
 # vn = VAENADE(voc_dim=train.shape[1])
 # vn.train(train, train_seq)
-# X_train = nvdm.get_representation(train)
-# X_test = nvdm.get_representation(test)
-# logistic = linear_model.LogisticRegression()
-# logistic.fit(X_train, train_target)
-# pred = logistic.predict(X_test)
-# print(metrics.classification_report(test_target, pred))
-# print(metrics.confusion_matrix(test_target, pred))
-# print(logistic.fit(X_train, train_target.flatten()).score(X_test, test_target))
