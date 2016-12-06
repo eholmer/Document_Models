@@ -43,6 +43,58 @@ def batch(iterable, n=1):
         yield iterable[ndx:min(ndx + n, l)]
 
 
+def ir(train, test, train_target, test_target, model, multi_label=False):
+    """ Perform Information Retrieval test. Measures the precision for
+    different pre-defined Recall rates.
+
+    Parameters
+    ----------
+    train : Matrix of training samples.
+    test : Matrix of testing samples.
+    train_target : Array of target labels for each training sample.
+    test_target : Array of target labels for each testing sample.
+    model : Model from which to get the document representations.
+    intervals : List of recall rates.
+    multi_label: True if a document can belong to multiple classes.
+    """
+    print("Getting train representations")
+    train_rep = model.get_representation(train)
+
+    print("Getting test representations")
+    test_rep = model.get_representation(test)
+
+    print("Calculating distance")
+    if multi_label:
+        correct = np.zeros(train.shape[0])
+        # for i, row in enumerate(test_rep):
+        batch_size = 500
+        for ndx in range(0, test_rep.shape[0], batch_size):
+            closest = distance.cdist(test_rep[ndx:ndx+batch_size], train_rep,
+                                     metric='cosine').argsort(axis=1)
+            target_batch = test_target[ndx:ndx+batch_size]
+            for i, row in enumerate(closest):
+                print("Row: {}".format(i+ndx))
+                res = (train_target[row].multiply(target_batch[i]) 
+                       .sum(axis=1)/(target_batch[i].sum()*1.0)).A1
+                correct += res
+        correct /= test_target.shape[0]
+    else:
+        closest = distance.cdist(test_rep, train_rep, metric='cosine')\
+                .argsort(axis=1)
+        closest_t = []
+        for row in closest:
+            closest_t.append(train_target[row].flatten())
+        test_target = np.reshape(test_target, (len(test_target), 1))
+        correct = np.mean(closest_t == test_target, axis=0)
+    return correct
+
+
+def feed_from_sparse(data, target):
+    data = data.tocoo()
+    ind = np.vstack([data.row, data.col]).T
+    return {target: (ind, data.data, data.shape)}
+
+
 class DocNADE():
     def __init__(self, voc_size, word2idx=None, idx2word=None, h_dim=50):
         """ Initate Tensorflow graph for DocNADE.
@@ -85,7 +137,9 @@ class DocNADE():
         self.nll = tf.reduce_sum(p_x_i)
 
         # Tensor for getting the representation of a document
-        self.rep = tf.sigmoid(tf.reduce_sum(tf.gather(self.W, self.x), 0) + c)
+        self.x_batch = tf.sparse_placeholder(tf.float32)
+        x = tf.sparse_tensor_to_dense(self.x_batch, validate_indices=False)
+        self.rep = tf.sigmoid(tf.matmul(x, self.W) + c)
 
         self.sess = tf.Session()
         self.saver = tf.train.Saver()
@@ -153,40 +207,6 @@ class DocNADE():
             perps.append(loss/len(doc))
         return np.exp(np.mean(perps))
 
-    def ir(self, train, test, train_target, test_target):
-        """ Perform Information Retrieval test. Measures the precision for
-        different pre-defined Recall rates.
-
-        Parameters
-        ----------
-        train : Matrix of training samples.
-        test : Matrix of testing samples.
-        train_target : Array of target labels for each training sample.
-        test_target : Array of target labels for each testing sample.
-        """
-
-        fracs = np.rint(np.array([0.0002, 0.001, 0.004, 0.016, 0.064, 0.256])
-                        * len(train_target))
-        print("Getting train representations")
-        train_rep = self.get_representation(train)
-
-        print("Getting test representations")
-        test_rep = self.get_representation(test)
-
-        print("Calculating distance")
-        closest = distance.cdist(test_rep, train_rep, metric='cosine')\
-            .argsort(axis=1)
-        closest_t = []
-        for row in closest:
-            closest_t.append(train_target[row].flatten())
-        test_target = np.reshape(test_target, (len(test_target), 1))
-        correct = np.mean(closest_t == test_target, axis=0)
-        prec = []
-        for frac in fracs:
-            subset = correct[:frac+1]
-            prec.append(np.mean(subset))
-        return prec
-
     def closest_words(self, word, n=10):
         if self.word2idx is None or self.idx2word is None:
             return "No word to index mappings provided"
@@ -198,9 +218,10 @@ class DocNADE():
 
     def get_representation(self, data):
         reps = []
-        for doc in data:
-            reps.append(self.sess.run(self.rep, feed_dict={self.x: doc}))
-        return np.array(reps)
+        for b in batch(data, 10000):
+            feed = feed_from_sparse(b, self.x_batch)
+            reps.append(self.sess.run(self.rep, feed))
+        return np.vstack(reps)
 
     def wiki_test(self):
         with open('data/wiki', 'r') as f:
@@ -410,38 +431,6 @@ class RSM():
 
         return np.exp(-np.mean(log_ps))
 
-    def ir(self, train, test, train_target, test_target):
-        """ Perform Information Retrieval test. Measures the precision for
-        different pre-defined Recall rates.
-
-        Parameters
-        ----------
-        train : Matrix of training samples.
-        test : Matrix of testing samples.
-        train_target : Array of target labels for each training sample.
-        test_target : Array of target labels for each testing sample.
-        """
-
-        fracs = np.rint(np.array([0.0002, 0.001, 0.004, 0.016, 0.064, 0.256])
-                        * len(train_target))
-        train_rep = self.get_representation(train)
-        test_rep = self.get_representation(test)
-
-        print("Calculating distance")
-        closest = distance.cdist(test_rep, train_rep, metric='cosine')\
-            .argsort(axis=1)
-        closest_t = []
-        for row in closest:
-            closest_t.append(train_target[row].flatten())
-        test_target = np.reshape(test_target, (len(test_target), 1))
-        correct = np.mean(closest_t == test_target, axis=0)
-
-        prec = []
-        for frac in fracs:
-            subset = correct[:frac+1]
-            prec.append(np.mean(subset))
-        print(prec)
-
     def closest_word(self, word, n=10):
         if self.word2idx is None or self.idx2word is None:
             return "No word to index mapping provided"
@@ -594,7 +583,7 @@ class NVDM():
             else:
                 print("Decoder optimizing")
             for i, batch_i in enumerate(batch(train, batch_size)):
-                feed = self.feed_from_sparse(batch_i)
+                feed = feed_from_sparse(batch_i, self.x_s)
                 if alternating:
                     if epoch/10 % 2 == 0:
                         _, loss = self.sess.run([e_optimizer, self.total_loss],
@@ -614,12 +603,12 @@ class NVDM():
 
             print('--- Avg loss:', np.mean(losses))
             if epoch % 2 == 0:
-                feed = self.feed_from_sparse(train)
+                feed = feed_from_sparse(train, self.x_s)
                 summary = self.sess.run(merged_sum, feed_dict=feed)
                 writer.add_summary(summary, epoch)
 
             if epoch % 10 == 0:
-                feed = self.feed_from_sparse(valid)
+                feed = feed_from_sparse(valid, self.x_s)
                 summary = self.sess.run(perp, feed_dict=feed)
                 writer.add_summary(summary, epoch)
                 self.saver.save(self.sess, "checkpoints/nvdm.ckpt")
@@ -631,11 +620,6 @@ class NVDM():
             # Report crude perplexity
             # print(self.perplexity(valid))
 
-    def feed_from_sparse(self, data):
-        data = data.tocoo()
-        ind = np.vstack([data.row, data.col]).T
-        return {self.x_s: (ind, data.data, data.shape)}
-
     def perplexity(self, data, samples=1):
         """ Calculate perplexity using 1 or more samples of the hidden unit.
 
@@ -644,7 +628,7 @@ class NVDM():
         data : Matrix of data to calculate perplexity on.
         samples : Number of samples to use.
         """
-        feed = self.feed_from_sparse(data)
+        feed = feed_from_sparse(data, self.x_s)
         if samples == 1:
             return self.sess.run(self.perp, feed_dict=feed)
         else:
@@ -667,40 +651,6 @@ class NVDM():
         """
         self.saver.restore(self.sess, path)
 
-    def ir(self, train, test, train_target, test_target):
-        """ Perform Information Retrieval test. Measures the precision for
-        different pre-defined Recall rates.
-
-        Parameters
-        ----------
-        train : Matrix of training samples.
-        test : Matrix of testing samples.
-        train_target : Array of target labels for each training sample.
-        test_target : Array of target labels for each testing sample.
-        """
-        fracs = np.rint(np.array([0.0002, 0.001, 0.004, 0.016, 0.064, 0.256])
-                        * len(train_target))
-
-        print("Getting train representations")
-        train_rep = self.get_representation(train)
-
-        print("Getting test representations")
-        test_rep = self.get_representation(test)
-
-        print("Calculating distance")
-        closest = distance.cdist(test_rep, train_rep, metric='cosine')\
-            .argsort(axis=1)
-        closest_t = []
-        for row in closest:
-            closest_t.append(train_target[row].flatten())
-        test_target = np.reshape(test_target, (len(test_target), 1))
-        correct = np.mean(closest_t == test_target, axis=0)
-        prec = []
-        for frac in fracs:
-            subset = correct[:frac+1]
-            prec.append(np.mean(subset))
-        return prec
-
     def closest_words(self, word, n=10):
         if self.word2idx is None or self.idx2word is None:
             return "No word to index mapping provided"
@@ -710,7 +660,7 @@ class NVDM():
         return self.idx2word[closest[:n]]
 
     def get_representation(self, data):
-        feed = self.feed_from_sparse(data)
+        feed = feed_from_sparse(data, self.x_s)
         return self.sess.run(self.mu, feed_dict=feed)
 
 
@@ -809,7 +759,7 @@ class DeepDocNADE():
             print("-------Epoch: {}".format(epoch))
             for j, doc in enumerate(batch(train, 100)):
                 # for j, doc in enumerate(train):
-                feed = self.feed_from_sparse(doc)
+                feed = feed_from_sparse(doc, self.x_s)
                 _, loss = self.sess.run([optimizer, self.nll],
                                         feed_dict=feed)
                 losses.append(loss)
@@ -860,42 +810,8 @@ class DeepDocNADE():
                 perps.append(ensemble_loss)
             return np.exp(np.mean(perps))
         else:
-            feed = self.feed_from_sparse(data)
+            feed = feed_from_sparse(data, self.x_s)
             return self.sess.run(self.perp, feed_dict=feed)
-
-    def ir(self, train, test, train_target, test_target):
-        """ Perform Information Retrieval test. Measures the precision for
-        different pre-defined Recall rates.
-
-        Parameters
-        ----------
-        train : Matrix of training samples.
-        test : Matrix of testing samples.
-        train_target : Array of target labels for each training sample.
-        test_target : Array of target labels for each testing sample.
-        """
-
-        fracs = np.rint(np.array([0.0002, 0.001, 0.004, 0.016, 0.064, 0.256])
-                        * len(train_target))
-        print("Getting train representations")
-        train_rep = self.get_representation(train)
-
-        print("Getting test representations")
-        test_rep = self.get_representation(test)
-
-        print("Calculating distance")
-        closest = distance.cdist(test_rep, train_rep, metric='cosine')\
-            .argsort(axis=1)
-        closest_t = []
-        for row in closest:
-            closest_t.append(train_target[row].flatten())
-        test_target = np.reshape(test_target, (len(test_target), 1))
-        correct = np.mean(closest_t == test_target, axis=0)
-        prec = []
-        for frac in fracs:
-            subset = correct[:frac+1]
-            prec.append(np.mean(subset))
-        return prec
 
     def closest_words(self, word, n=10):
         if self.word2idx is None or self.idx2word is None:
@@ -906,21 +822,16 @@ class DeepDocNADE():
         return self.idx2word[closest[:n]]
 
     def get_representation(self, data):
-        feed = self.feed_from_sparse(data)
+        feed = feed_from_sparse(data, self.x_s)
         return self.sess.run(self.rep, feed_dict=feed)
-
-    def feed_from_sparse(self, data):
-        data = data.tocoo()
-        ind = np.vstack([data.row, data.col]).T
-        return {self.x_s: (ind, data.data, data.shape)}
 
 
 class VAENADE():
     def __init__(self, voc_dim, embed_dim=500, h_dim=50, window_size=5):
         with tf.variable_scope("Input"):
             # self.x_s = tf.sparse_placeholder(tf.float32, name="sparse_bow")
-            self.x_bow = tf.placeholder(tf.float32, [1, voc_dim],
-                                        name="bow_input")
+            self.x_bow = tf.sparse_placeholder(tf.float32, name="sparse_bow")
+            x = tf.sparse_tensor_to_dense(self.x_bow, validate_indices=False)
             self.x_seq = tf.placeholder(tf.int32, [None],
                                         name="sequence_input")
             # v_batch_size = tf.shape(self.x_s)[0]
@@ -938,7 +849,7 @@ class VAENADE():
             b_sigma = bias_variable([h_dim], name="b_sigma")
 
             # Encoder flow -->
-            l1 = tf.nn.relu(tf.matmul(self.x_bow, W1) + b1, name="l1")
+            l1 = tf.nn.relu(tf.matmul(x, W1) + b1, name="l1")
             self.mu = tf.add(tf.matmul(l1, W_mu), b_mu, name="mu")
             log_sigma_sq = tf.add(tf.matmul(l1, W_sigma), b_sigma,
                                   name="log_sigma_sq")
@@ -1005,7 +916,8 @@ class VAENADE():
             print("--- Epoch:", epoch)
             losses = []
             for i in range(0, num_docs):
-                feed = {self.x_bow: train[i].toarray(), self.x_seq: train_seq[i]}
+                feed = feed_from_sparse(train[i], self.x_bow)
+                feed[self.x_seq] = train_seq[i]
                 _, loss = self.sess.run([optimizer, self.tot_loss], feed)
                 losses.append(loss)
                 if i % 500 == 0:
@@ -1022,7 +934,8 @@ class VAENADE():
         for i in range(0, num_docs):
             if len(data_seq[i]) == 0:
                 continue
-            feed = {self.x_bow: data[i].toarray(), self.x_seq: data_seq[i]}
+            feed = feed_from_sparse(data[i], self.x_bow)
+            feed[self.x_seq] = data_seq[i]
             loss = self.sess.run(self.tot_loss, feed)
             perps.append(loss/data[i].sum())
         return np.exp(np.mean(perps))
@@ -1038,43 +951,8 @@ class VAENADE():
 
     def get_representation(self, data):
         rep = []
-        for doc in data:
-            feed = {self.x_bow: doc.toarray()}
+        for b in batch(data, 10000):
+            feed = feed_from_sparse(data[i], self.x_bow)
             r = self.sess.run(self.mu, feed)
-            rep.append(r.flatten())
-        return np.array(rep)
-
-    def ir(self, train, test, train_target, test_target):
-        """ Perform Information Retrieval test. Measures the precision for
-        different pre-defined Recall rates.
-
-        Parameters
-        ----------
-        train : Matrix of training samples.
-        test : Matrix of testing samples.
-        train_target : Array of target labels for each training sample.
-        test_target : Array of target labels for each testing sample.
-        """
-        fracs = np.rint(np.array([0.0002, 0.001, 0.004, 0.016, 0.064, 0.256])
-                        * len(train_target))
-
-        print("Getting train representations")
-        train_rep = self.get_representation(train)
-        print(train_rep)
-
-        print("Getting test representations")
-        test_rep = self.get_representation(test)
-
-        print("Calculating distance")
-        closest = distance.cdist(test_rep, train_rep, metric='cosine')\
-            .argsort(axis=1)
-        closest_t = []
-        for row in closest:
-            closest_t.append(train_target[row].flatten())
-        test_target = np.reshape(test_target, (len(test_target), 1))
-        correct = np.mean(closest_t == test_target, axis=0)
-        prec = []
-        for frac in fracs:
-            subset = correct[:frac+1]
-            prec.append(np.mean(subset))
-        return prec
+            rep.append(r)
+        return np.vstack(rep)
