@@ -952,7 +952,7 @@ class VAENADE():
     def get_representation(self, data):
         rep = []
         for b in batch(data, 10000):
-            feed = feed_from_sparse(data[i], self.x_bow)
+            feed = feed_from_sparse(b, self.x_bow)
             r = self.sess.run(self.mu, feed)
             rep.append(r)
         return np.vstack(rep)
