@@ -1,11 +1,15 @@
 from __future__ import print_function
-from topic_models import DocNADE, RSM, NVDM, DeepDocNADE, VAENADE, ir
 import numpy as np
 import scipy.sparse as sp
-from sklearn import linear_model, metrics 
 from sklearn.utils import shuffle
 from sklearn.datasets import load_svmlight_file
 import ujson
+from common import ir
+from docnade import DocNADE
+from rsm import RSM
+from nvdm import NVDM
+from deepdocnade import DeepDocNADE
+from vaenade import VAENADE
 
 
 def load_data(input_file):
@@ -18,8 +22,8 @@ def load_data(input_file):
 
 def load_seq():
     # sub = 'reuters_seq'
-    sub = 'reuters_big_seq'
-    # sub = '20ng_seq'
+    # sub = 'reuters_big_seq'
+    sub = '20ng_seq'
     if sub == 'reuters_big_seq':
         split = 10000
         data = load_data('data/' + sub + '/data.npz')
@@ -141,8 +145,7 @@ def dump(data, name):
 # DocNADE
 # dn = DocNADE(voc_size=train.shape[1])
 # dn.restore('checkpoints/docnade_r2_p=485.ckpt')
-# dn.wiki_test()
-# dn.train(train_dn, valid_dn)
+# dn.train(train_seq[100:], train_seq[:100])
 # print(dn.closest_words("medical"))
 # print(dn.perplexity(test_dn))
 # queries = ir(train, test, train_target, test_target, dn, multi_label=True)
@@ -160,15 +163,15 @@ def dump(data, name):
 # NVDM
 # nvdm = NVDM(input_dim=train.shape[1], word2idx=word2idx, idx2word=idx2word)
 # nvdm.restore('checkpoints/nvdm_20seq.ckpt')
-# nvdm.train(train, test, alternating=True, learning_rate=0.0005, max_iter=10000,
-#            batch_size=10)
+# nvdm.train(train, test, alternating=False, learning_rate=0.0005, max_iter=10000,
+#            batch_size=100)
 # print(nvdm.closest_words("medical"))
 # print(nvdm.get_perplexity(test))
 # queries = ir(train, test, train_target, test_target, nvdm)
 
 # DeepDocNADE
 # ddn = DeepDocNADE(word2idx=word2idx, idx2word=idx2word, voc_size=train.shape[1])
-# ddn.train(train, validation, learning_rate=0.0005)
+# ddn.train(train, test, learning_rate=0.0005)
 # ddn.restore('best_ckpt/deep_docnade_20ng.ckpt')
 # ddn.restore('checkpoints/docnade_p=818.ckpt')
 # print(ddn.perplexity(test_seq, True, ensembles=16))
@@ -177,7 +180,7 @@ def dump(data, name):
 # queries = ir(train, test, train_target, test_target, ddn)
 
 # VAENADE
-vn = VAENADE(voc_dim=train.shape[1])
+# vn = VAENADE(voc_dim=train.shape[1])
 # vn.train(train, train_seq)
-vn.restore('best_ckpt/vaenade_reuters.ckpt')
-print(vn.perplexity(test, test_seq))
+# vn.restore('best_ckpt/vaenade_reuters.ckpt')
+# print(vn.perplexity(test, test_seq))
