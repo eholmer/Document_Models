@@ -87,6 +87,48 @@ def ir(train, test, train_target, test_target, model, multi_label=False):
     return correct
 
 
+def similarity(train, test, train_target, test_target, model, second=False):
+    labels = set(train_target)
+    train_rep = model.get_representation(train)
+    test_rep = model.get_representation(test)
+    dists = []
+    cluster_centers = []
+    for label in labels:
+        cluster_centers.append(train_rep[train_target == label].mean(axis=0))
+
+    cluster_centers = np.array(cluster_centers)
+    if second:
+        for label in labels:
+            test_subset = test_rep[test_target == label]
+            dist_all = distance.cdist(test_subset, cluster_centers,
+                                      metric='cosine')
+            dist_all.sort(axis=1)
+            second_center = dist_all[:, 1]
+            dists.append((second_center/dist_all.mean(axis=1)).mean())
+    else:
+        for i, label in enumerate(labels):
+            center = cluster_centers[i]
+            test_subset = test_rep[test_target == label]
+            dist_center = distance.cdist(test_subset, [center],
+                                         metric='cosine')
+            dist_all = distance.cdist(test_subset, cluster_centers,
+                                      metric='cosine')
+            dists.append((dist_center/dist_all.mean(axis=1)).mean())
+    return dists
+
+
+def tsne(data, data_target, model):
+    from matplotlib import pyplot as plt
+    from sklearn.manifold import TSNE
+    rep = model.get_representation(data)
+    tsne = TSNE(perplexity = 30, n_components = 2, init = 'pca', n_iter = 5000)
+    print("Fitting")
+    two_d_embeddings = tsne.fit_transform(rep)
+    print(two_d_embeddings)
+    plt.scatter(two_d_embeddings[:, 0], two_d_embeddings[:, 1], c=data_target)
+    plt.show()
+
+
 def feed_from_sparse(data, target):
     data = data.tocoo()
     ind = np.vstack([data.row, data.col]).T

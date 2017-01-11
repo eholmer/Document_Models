@@ -4,7 +4,7 @@ import scipy.sparse as sp
 from sklearn.utils import shuffle
 from sklearn.datasets import load_svmlight_file
 import ujson
-from common import ir
+from common import ir, similarity, tsne
 from docnade import DocNADE
 from rsm import RSM
 from nvdm import NVDM
@@ -145,6 +145,9 @@ def dump(data, name):
 # DocNADE
 # dn = DocNADE(voc_size=train.shape[1])
 # dn.restore('checkpoints/docnade_r2_p=485.ckpt')
+# dn.restore('best_ckpt/docnade_20ng.ckpt')
+# sim = similarity(train, test, train_target, test_target, dn)
+# print(sim, np.mean(sim))
 # dn.train(train_seq[100:], train_seq[:100])
 # print(dn.closest_words("medical"))
 # print(dn.perplexity(test_dn))
@@ -162,25 +165,40 @@ def dump(data, name):
 
 # NVDM
 # nvdm = NVDM(input_dim=train.shape[1], word2idx=word2idx, idx2word=idx2word)
-# nvdm.restore('checkpoints/nvdm_20seq.ckpt')
+# nvdm.restore('best_ckpt/nvdm_20seq.ckpt')
 # nvdm.train(train, test, alternating=False, learning_rate=0.0005, max_iter=10000,
 #            batch_size=100)
 # print(nvdm.closest_words("medical"))
-# print(nvdm.get_perplexity(test))
+# print(nvdm.perplexity(test))
 # queries = ir(train, test, train_target, test_target, nvdm)
+# print(evaluate_ir(queries))
+# tsne(train, train_target, nvdm)
+# sim = similarity(train, test, train_target, test_target, nvdm)
+# print(sim, np.mean(sim), np.std(sim))
 
 # DeepDocNADE
 # ddn = DeepDocNADE(word2idx=word2idx, idx2word=idx2word, voc_size=train.shape[1])
 # ddn.train(train, test, learning_rate=0.0005)
 # ddn.restore('best_ckpt/deep_docnade_20ng.ckpt')
-# ddn.restore('checkpoints/docnade_p=818.ckpt')
-# print(ddn.perplexity(test_seq, True, ensembles=16))
+# ddn.restore('best_ckpt/deep_docnade_2l_20ng.ckpt')
+# print(ddn.perplexity(test_seq, True, ensembles=1))
 # print(ddn.perplexity(test_dn, True, ensembles=1))
 # print(ddn.perplexity(valid_dn, True))
 # queries = ir(train, test, train_target, test_target, ddn)
+# print(evaluate_ir(queries))
+# sim = similarity(train, test, train_target, test_target, ddn)
+# print(sim, np.mean(sim))
+# tsne(train, train_target, ddn)
 
 # VAENADE
 # vn = VAENADE(voc_dim=train.shape[1])
 # vn.train(train, train_seq)
-# vn.restore('best_ckpt/vaenade_reuters.ckpt')
+# vn.restore('checkpoints/vaenade_1g.ckpt')
+# vn.restore('best_ckpt/vaenade_20ng.ckpt')
+# sim = similarity(train, test, train_target, test_target, vn)
+# print(sim, np.mean(sim), np.std(sim))
+# tsne(train, train_target, vn)
 # print(vn.perplexity(test, test_seq))
+# queries = ir(train, test, train_target, test_target, vn)
+#  print(evaluate_ir(queries))
+
