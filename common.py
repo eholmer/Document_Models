@@ -97,23 +97,20 @@ def similarity(train, test, train_target, test_target, model, second=False):
         cluster_centers.append(train_rep[train_target == label].mean(axis=0))
 
     cluster_centers = np.array(cluster_centers)
+    dist_all = distance.cdist(test_rep, cluster_centers, metric='cosine')
     if second:
-        for label in labels:
-            test_subset = test_rep[test_target == label]
-            dist_all = distance.cdist(test_subset, cluster_centers,
-                                      metric='cosine')
-            dist_all.sort(axis=1)
-            second_center = dist_all[:, 1]
-            dists.append((second_center/dist_all.mean(axis=1)).mean())
+        for i, label in enumerate(labels):
+            dist_except = dist_all[np.ix_(test_target == label,
+                                          np.arange(len(cluster_centers)) != i)]
+            dist_except.sort(axis=1)
+            second_center = dist_except[:, 0]
+            mean_dist_all = dist_all[test_target == label].mean(axis=1)
+            dists.append((second_center/mean_dist_all).mean())
     else:
         for i, label in enumerate(labels):
-            center = cluster_centers[i]
-            test_subset = test_rep[test_target == label]
-            dist_center = distance.cdist(test_subset, [center],
-                                         metric='cosine')
-            dist_all = distance.cdist(test_subset, cluster_centers,
-                                      metric='cosine')
-            dists.append((dist_center/dist_all.mean(axis=1)).mean())
+            dist_center = dist_all[test_target == label, i]
+            mean_dist_all = dist_all[test_target == label].mean(axis=1)
+            dists.append((dist_center/mean_dist_all).mean())
     return dists
 
 
