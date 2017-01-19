@@ -10,6 +10,7 @@ from rsm import RSM
 from nvdm import NVDM
 from deepdocnade import DeepDocNADE
 from vaenade import VAENADE
+from dvae import DVAE
 
 
 def load_data(input_file):
@@ -202,3 +203,6 @@ def dump(data, name):
 # queries = ir(train, test, train_target, test_target, vn)
 #  print(evaluate_ir(queries))
 
+# DVAE
+dvae = DVAE(voc_size=train.shape[1]) 
+dvae.train(train, test, learning_rate=0.0005)
