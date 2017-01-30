@@ -85,22 +85,24 @@ class DVAE():
         self.perp = tf.exp(tf.reduce_mean((self.encoder_loss +
                                            self.generator_loss) / Dv))
             
-        # Test Flow
-        W_cum = tf.pad(tf.cumsum(tf.gather(self.W0, self.x_test[:-1])),
-                       [[1, 0], [0, 0]])
-        W_cum += b0
-        L1 = activ(W_cum)
-        MU = tf.matmul(L1, W_mu) + b_mu
-        LSS = tf.matmul(L1, W_sigma) + b_sigma
-        SIGMA = tf.sqrt(tf.exp(LSS))
-        EPS = tf.random_normal(tf.shape(W_cum), 0, 1, dtype=tf.float32)
-        H = MU + SIGMA*EPS
-        softmax = tf.nn.sparse_softmax_cross_entropy_with_logits
-        P_X_I = softmax(tf.matmul(H, V) + b, self.x_test)
-        E_loss = -0.5 * (tf.reduce_sum(1 + LSS -
-                                       tf.square(MU) +
-                                       tf.exp(LSS), 1))
-        self.nll_test = tf.reduce_sum(P_X_I) + tf.reduce_mean(E_loss)
+        # Test Flow. TODO: Figure out how to formulate KL-divergece for
+        # multiple latent representations. --->
+
+        # W_cum = tf.pad(tf.cumsum(tf.gather(self.W0, self.x_test[:-1])),
+        #                [[1, 0], [0, 0]])
+        # W_cum += b0
+        # L1 = activ(W_cum)
+        # MU = tf.matmul(L1, W_mu) + b_mu
+        # LSS = tf.matmul(L1, W_sigma) + b_sigma
+        # SIGMA = tf.sqrt(tf.exp(LSS))
+        # EPS = tf.random_normal(tf.shape(W_cum), 0, 1, dtype=tf.float32)
+        # H = MU + SIGMA*EPS
+        # softmax = tf.nn.sparse_softmax_cross_entropy_with_logits
+        # P_X_I = softmax(tf.matmul(H, V) + b, self.x_test)
+        # E_loss = -0.5 * (tf.reduce_sum(1 + LSS -
+        #                                tf.square(MU) +
+        #                                tf.exp(LSS), 1))
+        # self.nll_test = tf.reduce_sum(P_X_I) + tf.reduce_mean(E_loss)
 
         # Representation of Documents
         # self.rep = activ(tf.matmul(activ(tf.matmul(x, self.W) + c), W1) + c1)
