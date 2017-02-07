@@ -204,5 +204,5 @@ def dump(data, name):
 #  print(evaluate_ir(queries))
 
 # DVAE
-dvae = DVAE(voc_size=train.shape[1]) 
-dvae.train(train, test, learning_rate=0.0005)
+# dvae = DVAE(voc_size=train.shape[1]) 
+# dvae.train(train, test, learning_rate=0.0005)

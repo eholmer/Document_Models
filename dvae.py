@@ -9,23 +9,6 @@ from scipy.misc import logsumexp
 class DVAE():
     def __init__(self, voc_size, word2idx=None, idx2word=None, h_dim=50,
                  activation='sigmoid'):
-        """ Initate Tensorflow graph for DeepDocNADE.
-
-        Parameters
-        ----------
-        voc_size : Vocabulary size.
-        word2idx : Dict with mappings from word to its' index in the input
-                   vector.
-        idx2word : Array where each index corresponds to a word.
-        h_dim : Dimension of hidden units.
-
-        Notes
-        -----
-        Based on:
-        Lauly, S., Zheng, Y., Allauzen, A., and Larochelle, H.
-        Document Neural Autoregressive Distribution Estimation
-        """
-
         # Parameters
         self.voc_size = voc_size
         self.h_dim = h_dim

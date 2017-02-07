@@ -2,10 +2,26 @@ from __future__ import print_function
 from common import batch, bias_variable, weight_variable, feed_from_sparse
 import tensorflow as tf
 import numpy as np
+from scipy.spatial import distance
 
 
 class VAENADE():
-    def __init__(self, voc_dim, embed_dim=500, h_dim=50, window_size=5):
+    def __init__(self, voc_dim, word2idx=None, idx2word=None, embed_dim=500, h_dim=50, window_size=5):
+        """ Initate Tensorflow graph for VAENADE, an experimental document
+        model which introduces a language model on top of a variational autoencoder
+        to better model documents.
+
+        Parameters
+        ----------
+        voc_dim : Vocabulary size.
+        word2idx : Dict with mappings from word to its' index in the input
+                   vector.
+        idx2word : Array where each index corresponds to a word.
+        embed_dim : Dimension of the embedding layer(s).
+        h_dim : Dimension of hidden units.
+        """
+        self.word2idx = word2idx
+        self.idx2word = idx2word
         with tf.variable_scope("Input"):
             # self.x_s = tf.sparse_placeholder(tf.float32, name="sparse_bow")
             self.x_bow = tf.sparse_placeholder(tf.float32, name="sparse_bow")
@@ -47,15 +63,15 @@ class VAENADE():
 
         with tf.variable_scope("Decoder"):
             # Decoder variables -->
-            W_emb = weight_variable([voc_dim, h_dim], name="W_embedding_mat")
+            self.W_emb = weight_variable([voc_dim, h_dim], name="W_embedding_mat")
             b_emb = bias_variable([h_dim], name="b_embedding")
-            W_softm = weight_variable([2*h_dim, voc_dim], name="W_softmax")
+            self.W_softm = weight_variable([2*h_dim, voc_dim], name="W_softmax")
             b_softm = bias_variable([voc_dim], name="b_softmax")
 
             # Decoder flow -->
             # Create windows of length window_size of the previous words
             # to predict current.
-            embeddings = tf.pad(tf.gather(W_emb, self.x_seq[:-1]),
+            embeddings = tf.pad(tf.gather(self.W_emb, self.x_seq[:-1]),
                                 [[1, 0], [0, 0]], name="embeddings")
             cumbeddings = tf.cumsum(embeddings, name="cumulative_embeddnings")
             transposed_cumbeddnings = tf.pad(cumbeddings[:-window_size],
@@ -70,7 +86,7 @@ class VAENADE():
 
             # Decoder loss is negative log-likelihood.
             softmax = tf.nn.sparse_softmax_cross_entropy_with_logits
-            p_x_i = softmax(tf.matmul(h_concat, W_softm) + b_softm,
+            p_x_i = softmax(tf.matmul(h_concat, self.W_softm) + b_softm,
                             self.x_seq, name="Cross_entropy")
 
             self.g_loss = tf.reduce_sum(p_x_i, name="Decoder_loss")
@@ -81,6 +97,15 @@ class VAENADE():
         self.saver = tf.train.Saver()
 
     def train(self, train, train_seq, max_epochs=1000, learning_rate=0.00001):
+        """ Train the model using ADAM optimizer.
+
+        Parameters
+        ----------
+        train : Matrix of training data (Bag Of Words).
+        train_seq : List of the true word sequences of the training data.
+        max_epochs : Maximum number of epochs in training.
+        learning_rate : Learning rate for updating paramters.
+        """
         optimizer = tf.train.AdamOptimizer(learning_rate)\
             .minimize(self.tot_loss)
         self.sess.run(tf.initialize_all_variables())
@@ -107,6 +132,13 @@ class VAENADE():
             self.saver.save(self.sess, "checkpoints/vaenade.ckpt")
 
     def perplexity(self, data, data_seq):
+        """ Calculate perplexity. 
+
+        Parameters
+        ----------
+        data : Matrix of data to calculate perplexity on (Bag Of Words).
+        data_seq : List of true word sequences of the training data.
+        """
         perps = []
         num_docs = data.shape[0]
         for i in range(0, num_docs):
@@ -126,6 +158,18 @@ class VAENADE():
         path : Path to the stored model.
         """
         self.saver.restore(self.sess, path)
+
+    def closest_words(self, word, n=5, local=False):
+        if self.word2idx is None or self.idx2word is None:
+            return "No word to index mappings provided"
+        if local:
+            W_out = self.sess.run(self.W_emb)
+        else:
+            W_out = np.transpose(self.sess.run(self.W_softm))
+
+        w = W_out[self.word2idx[word], :]
+        closest = distance.cdist([w], W_out, metric='cosine')[0].argsort()
+        return [self.idx2word[idx] for idx in closest[1:n+1]]
 
     def get_representation(self, data):
         rep = []

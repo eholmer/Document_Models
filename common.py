@@ -88,6 +88,19 @@ def ir(train, test, train_target, test_target, model, multi_label=False):
 
 
 def similarity(train, test, train_target, test_target, model, second=False):
+    """Measuers the average distance from each document to either its correct
+    topic centroid or the second closest centroid, excluding the correct one.
+
+    Parameters
+    ----------
+    train : Matrix of training samples.
+    test : Matrix of test samples.
+    train_target : Labels for training samples.
+    test_target : Labels for test samples.
+    model : The model on which to evaluate the distances. (Must implement 
+    get_representation())
+    second: Boolean to decide which distance metric to compute
+    """
     labels = set(train_target)
     train_rep = model.get_representation(train)
     test_rep = model.get_representation(test)
@@ -127,6 +140,7 @@ def tsne(data, data_target, model):
 
 
 def feed_from_sparse(data, target):
+    """Helper function to convert sparse data into a TensorFlow feed"""
     data = data.tocoo()
     ind = np.vstack([data.row, data.col]).T
     return {target: (ind, data.data, data.shape)}
