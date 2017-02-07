@@ -1,2 +1,7 @@
-# mt-generative-models
-Master thesis on generative models, in cooperation with 1plusX.
+# Generative Document Models
+This repository consists of TensorFlow implementations of some of the state of the art Document Models:
+- DocNADE
+- DeepDocNADE
+- Replicated Softmax
+- NVDM
+- Own experimental models (VAENADE, DVAE).
